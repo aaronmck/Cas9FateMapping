@@ -125,8 +125,17 @@ def outputReads(umi: String, reads: Array[String], names: Array[String], outputF
   val collapsedConc = collapseConsensus((consensusRead._1,consensusRead._2))
 
   // require that the consensus read has kept at least 80% of the original reads
-  val usingRead = (consensusRead._4 > 0.8) && (collapsedConc._1.slice(0,primers(0).length + 5) contains primers(0)) && (collapsedConc._1.slice(collapsedConc._1.size - (primers(0).length + 5),collapsedConc._1.size) contains primers(1))
-  outputStats.write(umi + "\t" + reads.size + "\t" + newReads.size + "\t" + consensusRead._3 + "\t" + collapsedConc._2 + "\t" + consensusRead._4 + "\t" + usingRead + "\t" + collapsedConc._1 + "\t" + ref + "\n")
+  val highConcensus = (consensusRead._4 > 0.8)
+  val forwardPrimer = (collapsedConc._1.slice(0,primers(0).length + 5) contains primers(0))
+  val reversePrimer = (collapsedConc._1.slice(collapsedConc._1.size - (primers(0).length + 5),collapsedConc._1.size) contains primers(1))
+  val usingRead =  highConcensus && forwardPrimer && reversePrimer
+
+  var failureReason = ""
+  if (!highConcensus) failureReason += "lowConsensus;"
+  if (!forwardPrimer) failureReason += "forwardPrimerMissing;"
+  if (!reversePrimer) failureReason += "reversePrimerMissing;"
+  if (failureReason == "") failureReason = "PASS"
+  outputStats.write(umi + "\t" + reads.size + "\t" + newReads.size + "\t" + consensusRead._3 + "\t" + collapsedConc._2 + "\t" + consensusRead._4 + "\t" + usingRead + "\t" + failureReason + "\t" + collapsedConc._1 + "\t" + ref + "\n")
   if ( usingRead ) {
     outputFASTA.write(">" + sample + "_umi_" + umi + "_reads_used_" + consensusRead._3 + "_overall_match_prop_" + collapsedConc._2 + "_read_prop_retained_" + consensusRead._4 + "\n" + collapsedConc._1 + "\n")
   }
@@ -155,6 +164,7 @@ val umiLength = args(3).toInt
 val primersEachEnd = args(4)
 val reference = args(5)
 val samplename= args(6)
+val minReadsBackingAUMI = 10
 
 // get the reference string
 var referenceString = ""
@@ -187,7 +197,7 @@ forwardReads foreach {grp => {
 }}
 //println("Processed " + readsProcessed + " reads....")
 
-outputStats.write("UMI\tall.treads.with.umi\tumi.reads.with.primers\treads.used.in.final.consensus\tmean.proportion.of.final.bases.matching.consensus\treads.retained.primers.to.final\tumi.used.in.analysis\tfinal.consensus\tref\n")
+outputStats.write("UMI\tumi.reads\twith.primers\tfinal.consensus.reads\tbases.matching\treads.retained\tused.in.analysis\tfailure.reason\tfinal.consensus\tref\n")
 
 var passingUMI = 0
 var hereReads = 0
@@ -198,7 +208,7 @@ umiReads.foreach{ case(umi,reads) => {
   val nameArray = umiReadNames(umi).result()
 
   hereReads += readArray.length
-  if (readArray.length > 20) {
+  if (readArray.length > minReadsBackingAUMI) {
     outputReads(umi,readArray,nameArray, outputFile, outputStats, referenceString,primers, samplename)
     passingUMI += 1
   }

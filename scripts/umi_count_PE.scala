@@ -2,7 +2,12 @@ import scala.io._
 import java.io._
 import scala.collection.mutable._
 import scala.sys.process._
+import java.util.zip._
 
+// read in compressed input streams with scala source commands
+def gis(s: String) = new GZIPInputStream(new BufferedInputStream(new FileInputStream(s)))
+
+// complement a base as a character
 def compBase(b: Char): Char = b match {
   case 'A' => 'T'
   case 'C' => 'G'
@@ -15,6 +20,7 @@ def compBase(b: Char): Char = b match {
   case _ => 'N'
 }
 
+// reverse complement a string of DNA bases
 def reverseComplement(str: String) = str.map{t => compBase(t)}.reverse.mkString("")
 
 // ------------------------------------------------------------------------------------------
@@ -51,6 +57,24 @@ case class Merger(alignedFile: File) {
       nameToRead(currentReadName.get) = currentRead
 }
 
+def phredCharToDouble(ch: Char): Double = math.pow(10,((ch.toInt -32) / 10.0) * -1.0)
+def phredCharToQscore(ch: Char): Int = (ch.toInt -32)
+
+// quality filter reads.  Find any window of n bases that have a quality score less than X, cut and drop
+// the rest of the read.  returns the remaining read string
+def qualityControlRead(read: String, qualString: String, windowSize: Int = 5, minWindowQual: Double = 25): String = {
+  val cutPos = qualString.toArray.sliding(windowSize).zipWithIndex.map{case(bases,index) => {
+    if (bases.map{b => phredCharToQscore(b)}.sum / windowSize.toDouble < minWindowQual)
+      index
+    else
+      0
+  }}.filter(x => x != 0).toArray
+
+  if (cutPos.size > 0)
+    read.slice(0,cutPos(0))
+  else
+    read
+}
 
 // develop a consensus over the read -- look at each aligned position and find the most common character and it's proportion
 // return the consensus read and proportion of bases at each position that match the called base
@@ -153,6 +177,7 @@ def outputReads(umi: String,
       matchingRev += 1
     total += 1
 
+    //println(reverseComplement(primers(1)))
     if ((fwd contains primers(0)) && (rev contains reverseComplement(primers(1)))) {
       // println("HIT")
       newReadsF :+= fwd
@@ -185,17 +210,29 @@ def outputReads(umi: String,
   val collapsedConcR = collapseConsensus((consensusReadR._1,consensusReadR._2))
 
   // require that the consensus read has kept at least 80% of the original reads
-  val usingReadF = (consensusReadF._4 > 0.8) && (collapsedConcF._1.slice(0,primers(0).length + 5) contains primers(0))
-  val usingReadR = (consensusReadR._4 > 0.8) && (collapsedConcR._1.slice(0,primers(1).length + 5) contains reverseComplement(primers(1)))
+  val highConcensusF = (consensusReadF._4 > 0.8)
+  val highConcensusR = (consensusReadR._4 > 0.8)
+  val forwardPrimer = (collapsedConcF._1.slice(0,primers(0).length + 5) contains primers(0))
+  val reversePrimer = (collapsedConcR._1.slice(0,primers(1).length + 5) contains reverseComplement(primers(1)))
+  val usingRead =  highConcensusF && highConcensusR && forwardPrimer && reversePrimer
 
-  outputStats.write(umi + "\t" + (usingReadF && usingReadR) + "\t" + (usingReadF) + "\t" + (usingReadR) + "\t") // write the UMI out and if we're using the read (and if it was rev or fwd reads that ruined it)
+  var failureReason = ""
+  if (!highConcensusF) failureReason += "lowConsensusF;"
+  if (!highConcensusR) failureReason += "lowConsensusR;"
+  if (!forwardPrimer) failureReason += "forwardPrimerMissing;"
+  if (!reversePrimer) failureReason += "reversePrimerMissing;"
+  if (failureReason == "") failureReason = "PASS"
+
+  outputStats.write(umi + "\t" + usingRead + "\t" + failureReason + "\t") // write the UMI out and if we're using the read (and if it was rev or fwd reads that ruined it)
   outputStats.write(readsF.size + "\t" + newReadsF.size + "\t" + consensusReadF._3 + "\t" + + readsR.size + "\t" + newReadsR.size + "\t" + consensusReadR._3 + "\t") // output the before and after filtering counts of reads (fwd and rev)
 
   // twoPassConsensus: returns a tuple-4: the consensus, it's average per-base error rate, number of reads used in the final assembly, and the proportion retained of the total
   outputStats.write(collapsedConcF._2 + "\t" + collapsedConcF._1 + "\t")
   outputStats.write(collapsedConcR._2 + "\t" + collapsedConcR._1 + "\n")
 
-  if ( usingReadF && usingReadR ) {
+
+
+  if ( usingRead ) {
     outputFASTAF.write(">" + sample + "_umi_" + umi + "_reads_used_" + consensusReadF._3 + "_overall_match_prop_" + collapsedConcF._2 + "_read_prop_retained_" + consensusReadF._4 + "\n" + collapsedConcF._1 + "\n")
     outputFASTAR.write(">" + sample + "_umi_" + umi + "_reads_used_" + consensusReadR._3 + "_overall_match_prop_" + collapsedConcR._2 + "_read_prop_retained_" + consensusReadR._4 + "\n" + collapsedConcR._1 + "\n")
   }
@@ -213,6 +250,18 @@ def clustal_reads(newReads: Array[String], newNames:Array[String] ): File = {
   return tmpOutput
 }
 
+def discover_cluster(newReads: Array[String], newNames:Array[String] ): File = {
+  // setup a CLUSTAL run and farm it out the machine
+  val tmp = java.io.File.createTempFile("UMIMerger", ".txt")
+  val tmpWriter = new PrintWriter(tmp)
+  newReads.zip(newNames).foreach{case(read,name) => tmpWriter.write("> " + name + "\n" + read + "\n")}
+  tmpWriter.close()
+  val tmpOutput = java.io.File.createTempFile("UMIMerger", ".post.txt")
+  val clustoResult = ("clustalo --force --pileup -i " + tmp + " -o " + tmpOutput).!!
+  return tmpOutput
+}
+
+
 // *********************************************************************************************************
 // print the usage parameters and quit
 def printUsageAndQuit() {
@@ -222,7 +271,11 @@ def printUsageAndQuit() {
 
 
 // *********************************************************************************************************
+//
+//
 // main script point
+//
+//
 // *********************************************************************************************************
 
 // check that the correct number of inputs was provided
@@ -243,8 +296,8 @@ Source.fromFile(reference).getLines().foreach{line => if (!line.startsWith(">"))
 
 // first find out what UMIs to keep
 // ------------------------------------------------------------------------------------------
-val forwardReads = Source.fromFile(inputFileReads1).getLines().grouped(4)
-val reverseReads = Source.fromFile(inputFileReads2).getLines().grouped(4)
+val forwardReads = Source.fromInputStream(gis(inputFileReads1)).getLines().grouped(4)
+val reverseReads = Source.fromInputStream(gis(inputFileReads2)).getLines().grouped(4)
 
 val primers = Source.fromFile(primersEachEnd).getLines().map{line => line}.toList
 if (primers.length != 2)
@@ -264,6 +317,7 @@ forwardReads foreach {fGroup => {
 
   val umi = fGroup(1).slice(0,umiLength)
   val readNoUMI = fGroup(1).slice(umiLength,fGroup(1).length)
+  val qualNoUMI = fGroup(3).slice(umiLength,fGroup(3).length)
 
   val readBuilderF = umiReadsFWD.getOrElse(umi,ArrayBuilder.make[String])
   val nameBuilderF = umiReadNamesFWD.getOrElse(umi,ArrayBuilder.make[String])
@@ -271,12 +325,12 @@ forwardReads foreach {fGroup => {
   val readBuilderR = umiReadsRVS.getOrElse(umi,ArrayBuilder.make[String])
   val nameBuilderR = umiReadNamesRVS.getOrElse(umi,ArrayBuilder.make[String])
 
-  readBuilderF += readNoUMI
+  readBuilderF += qualityControlRead(readNoUMI,qualNoUMI)
   nameBuilderF += fGroup(0)
   umiReadsFWD(umi) = readBuilderF
   umiReadNamesFWD(umi) = nameBuilderF
 
-  readBuilderR += rGroup(1)
+  readBuilderR += qualityControlRead(rGroup(1),rGroup(3))
   nameBuilderR += rGroup(0)
   umiReadsRVS(umi) = readBuilderR
   umiReadNamesRVS(umi) = nameBuilderR
@@ -284,7 +338,7 @@ forwardReads foreach {fGroup => {
   readsProcessed += 1
 }}
 
-outputStats.write("UMI\tused\tfor.valid\trev.valid\tfwd.reads\tprimered.fwd.reads\tfiltered.fwd.reads\trev.reads\tprimered.rev.reads\tfiltered.rev.reads\t")
+outputStats.write("UMI\tused\tffail.reason\tfwd.reads\tprimered.fwd.reads\tfiltered.fwd.reads\trev.reads\tprimered.rev.reads\tfiltered.rev.reads\t")
 outputStats.write("fwd.error.rate\tfwd.read\trev.error.rate\trev.read\n")
 
 var passingUMI = 0
@@ -292,6 +346,7 @@ var totalWithUMI = 0
 var usedReads = 0
 
 println("Processing " + umiReadsFWD.size + " UMIs")
+var index = 0
 umiReadsFWD.foreach{ case(umi,reads) => {
   val reverseReads = umiReadsRVS(umi).result()
   val forwardReads = reads.result()
@@ -299,15 +354,19 @@ umiReadsFWD.foreach{ case(umi,reads) => {
   val nameArrayF = umiReadNamesFWD(umi).result()
   val nameArrayR = umiReadNamesRVS(umi).result()
 
-  if (reverseReads.length > 20) {
+  if (reverseReads.length > 30) {
     val res = outputReads(umi,forwardReads, reverseReads, nameArrayF, nameArrayR, outputFileF, outputFileR, outputStats, referenceString,primers, samplename)
     totalWithUMI += res._2
     usedReads += res._1
     passingUMI += 1
   }
+  index += 1
+  if (index % 100 == 0) {
+    println("INFO: Processed " + index + " umis so far")
+  }
 }}
 
-println("Summary:\ntotal reads:\t"+ readsProcessed + "\ntotal withing a valid UMI:\t" + totalWithUMI + "\ntotal used for consensus reads:\t" + usedReads + "\ntotal UMIs:\t" + passingUMI)
+println("Summary:\ntotal reads:\t"+ readsProcessed + "\ntotal reads withing a valid UMI:\t" + totalWithUMI + "\ntotal reads used for consensus reads:\t" + usedReads + "\ntotal passing UMIs:\t" + passingUMI)
 
 outputStats.close()
 outputFileF.close()
