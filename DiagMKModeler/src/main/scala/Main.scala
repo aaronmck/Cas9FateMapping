@@ -1,6 +1,9 @@
 package main.scala
 
 
+import main.scala.TreeSimulation.{GlobalSiteModel, TreeNode, GlobalSiteModel$}
+import org.apache.commons.math3.distribution.PoissonDistribution
+
 import scala.io._
 import java.io._
 import scala.collection.mutable._
@@ -8,9 +11,8 @@ import scala.sys.process._
 import java.util.zip._
 
 /**
- * created by aaronmck on 2/13/14
  *
- * Copyright (c) 2014, aaronmck
+ * Copyright (c) 2015, aaronmck
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -36,7 +38,11 @@ import java.util.zip._
  */
 case class Config(meltedUMIFile: File = new File(Main.NOTAREALFILENAME),
                   phylogenyOutput: File = new File(Main.NOTAREALFILENAME),
-                  targetSiteCount: Int = 10
+                  bestTree: File = new File(Main.NOTAREALFILENAME),
+                  annotationOutput: File = new File(Main.NOTAREALFILENAME),
+                  targetSiteCount: Int = 10,
+                  numberOfSimulations: Int = 100,
+                  oldStyleAnalysis: Boolean = true
                    )
 
 
@@ -46,13 +52,16 @@ object Main extends App {
   val NOTAREALFILE = new File(NOTAREALFILENAME)
 
   // parse the command line arguments
-  val parser = new scopt.OptionParser[Config]("UMIMerge") {
+  val parser = new scopt.OptionParser[Config]("TreeSimluator") {
     head("UMIMerge", "1.0")
 
     // *********************************** Inputs *******************************************************
     opt[File]("meltedUMIFile") required() valueName ("<file>") action { (x, c) => c.copy(meltedUMIFile = x) } text ("the UMI summary file")
-    opt[File]("phylogenyOutput") required() valueName ("<file>") action { (x, c) => c.copy(phylogenyOutput = x) } text ("where to put the output for our phlogeny")
+    opt[File]("phylogenyOutput") required() valueName ("<file>") action { (x, c) => c.copy(phylogenyOutput = x) } text ("where to put the output stats and all trees from our search")
+    opt[File]("bestTree") required() valueName ("<file>") action { (x, c) => c.copy(bestTree = x) } text ("where to put the best tree output for our phylogeny")
+    opt[File]("annotationOutput") required() valueName ("<file>") action { (x, c) => c.copy(annotationOutput = x) } text ("where to put the output for our annotations")
     opt[Int]("targetSiteCount") required() action { (x, c) => c.copy(targetSiteCount = x) } text ("the length of our UMIs")
+    opt[Int]("numberOfSimulations") required() action { (x, c) => c.copy(numberOfSimulations = x) } text ("the number of simulations we should try")
 
 
     // some general command-line setup stuff
@@ -60,59 +69,91 @@ object Main extends App {
     help("help") text ("prints the usage information you see here")
   }
 
-  // *********************************** Main script stuff ******************************************************
-  parser.parse(args, Config()) map {
+  parser.parse(args, Config()).map {
     config: Config => {
 
-      // ------------------------------------------------------------------------------------
-      // Main script
-      // ------------------------------------------------------------------------------------
+      if (!config.oldStyleAnalysis) {
+        // the number of markov chains we hope to simulate
+        val numberOfChainsPerEventPerGeneration = 10
 
-      val positionToCounts = HashMap[Int, HashMap[String, Int]]()
-      val positionToCountsNormalized = HashMap[Int, HashMap[String, Double]]()
-      var totalRows = 0
-      val eventNumberToEvents = HashMap[Int, HashMap[String, Array[Event]]]()
+        // the poisson mean
+        val poissonMean = 1.2
+        val normalizedPoissonMean =.1 / 10.0
 
-      (0 until config.targetSiteCount + 1).foreach { i => {
-        positionToCounts(i) = new HashMap[String, Int]()
-        positionToCountsNormalized(i) = new HashMap[String, Double]()
-        eventNumberToEvents(i) = HashMap[String, Array[Event]]()
-      }
-      }
+        // setup a global model file -- the site specific probabilities for each event over sites in the target sequence
+        val (model, events) = MulitMarginalDist.createMode(config.meltedUMIFile, config.targetSiteCount)
 
-      // ------------------------------------------------------------------------------------
-      // now normalize the positional counts by the total
-      // ------------------------------------------------------------------------------------
-      positionToCounts.foreach { case (position, counts) => {
-        counts.foreach { case (event, count) => positionToCountsNormalized(position)(event) = count.toDouble / totalRows.toDouble }
-      }
-      }
+        // now sample some of possible chains, given our events, our model, and the number of chains
+        val timing = new PoissonDistribution(poissonMean)
 
-      println("unique tags:")
-      (1 until 10).foreach { index => println(index + " " + eventNumberToEvents(index).size) }
+        // a collection of event chains, find the most likely event chain for each event we have
+        val chainsPerEvent = new HashMap[Int, ArrayBuffer[RootPath]]()
 
-      val output = new PrintWriter(config.phylogenyOutput)
-      output.write(Event.headerString + "\n")
-
-      (2 until 10).foreach { index =>
-        if (eventNumberToEvents contains index) {
-          val befores = eventNumberToEvents(index - 1).map { case (id, hits) => hits(0) }.toArray
-          val firsts = eventNumberToEvents(index).map { case (id, hits) => hits(0) }.toArray
-
-          print("index " + index + " count " + firsts.length + " with prob = ")
-
-          var tt = 0
-          firsts.map { case (evt) => {
-            if (evt.oneEdit(befores))
-              tt += 1
-            output.write(evt.toOutputString + "\n")
-          }
-          }
-          println(tt)
+        (0 until numberOfChainsPerEventPerGeneration * events.size) foreach { eventID =>
+          val id = eventID % numberOfChainsPerEventPerGeneration
+          val buffer = chainsPerEvent.getOrElse(id, new ArrayBuffer[RootPath]())
+          buffer += RootPath(events(id), timing, model)
+          chainsPerEvent(id) = buffer
         }
-      }
-      output.close()
 
+        // now go and find the most likely chain per Event
+        val bestChain = new Array[RootPath](numberOfChainsPerEventPerGeneration)
+
+        chainsPerEvent.foreach { case (id, eventBuffer) => {
+          var probString = ""
+          val eventB = eventBuffer.toArray
+          var bestEvent: Option[RootPath] = None
+          eventB.foreach { evt => {
+            probString += evt.calculateProbability(normalizedPoissonMean) + ","
+            if (!bestEvent.isDefined || evt.calculateProbability(normalizedPoissonMean) > bestEvent.get.calculateProbability(normalizedPoissonMean)) {
+              bestEvent = Some(evt)
+            }
+          }
+          }
+          println(bestEvent.get.calculateProbability(normalizedPoissonMean) + "\t" + bestEvent.get.toEventString + "\t" + probString)
+        }
+        }
+      } else {
+        //Old approach:
+
+        val model = GlobalSiteModel.createModelReturnEvents(config.meltedUMIFile, config.targetSiteCount)
+        val noSelection = (List.fill(config.targetSiteCount)(Event.NONE)).toArray
+
+        val outputStats = new PrintWriter(config.phylogenyOutput)
+        val outputBest = new PrintWriter(config.bestTree)
+
+
+        var bestTree: Option[TreeNode] = None
+        var bestLikelihood = Double.NegativeInfinity
+        var bestLikelihoodDiff = Double.MaxValue
+        print("simulating")
+        for (i <- 1 until config.numberOfSimulations) {
+          print(".")
+          val rootNode = TreeNode(model._1, 1, 0.0, noSelection)
+
+          if (rootNode.logLikelihood > bestLikelihood) {
+            bestTree = Some(rootNode)
+            bestLikelihoodDiff = rootNode.logLikelihood - bestLikelihood
+            bestLikelihood = rootNode.logLikelihood
+          }
+
+          //println("log-likelihood: " + rootNode.currentLogLikelihood + " newick " + rootNode.currentString)
+          outputStats.write(rootNode.logLikelihood + "\t" + rootNode.maxDepth + "\t(" + rootNode.newickString + ");\n")
+
+        }
+        outputStats.close()
+
+        // write the best tree
+        println("Best tree has log-likelihood of " + bestLikelihood + " with a gain of " + bestLikelihoodDiff)
+        outputBest.write("(" + bestTree.get.newickString + ");\n")
+        outputBest.close()
+
+        // and it's annotations
+        val outputAnnotation = new PrintWriter(config.annotationOutput)
+        outputAnnotation.write("taxon\tsource\n")
+        bestTree.get.writeAnnotations(model._2, outputAnnotation)
+        outputAnnotation.close() */
+      }
     }
   }
 
