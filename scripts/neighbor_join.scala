@@ -119,6 +119,36 @@ object Event {
   }
 }
 
+
+// now create a distance matrix of all of the unique samples:
+// each inner array represents a single sample for ease of
+// access / modification
+
+def calculateDistances(events: Array[Event], eventToDistance: HashMap[String,Double], noneScore: Double = 0): Array[Array[Double]] = {
+  var distances = Array[Array[Double]]()
+
+  events.foreach{event => {
+    val innnerDistance = new Array[Double](events.size)
+    events.zipWithIndex.foreach{case(event2,index) => {
+        innnerDistance(index) = event.eventStrings.zip(event2.eventStrings).map{case(evt1,evt2) => {
+          if (evt1 == "NONE" && evt2 == "NONE")
+            noneScore
+          else if (evt1 == "NONE" && evt2 != "NONE")
+            eventToDistance(evt2)
+          else if (evt1 != "NONE" && evt2 == "NONE")
+            eventToDistance(evt1)
+          else if (evt1 != evt2)
+            eventToDistance(evt1) + eventToDistance(evt2)
+          else
+            0
+        }}.sum
+    }}
+    distances :+= innnerDistance
+  }}
+  return distances
+}
+
+
 // ------------------------------------------------------------------------------------------------------------------------
 // parse out the event strings into events
 // ------------------------------------------------------------------------------------------------------------------------
@@ -170,33 +200,7 @@ eventToCount.foreach{case(evtStr,count) => {
 }}
 //countFile.close()
 
-// now create a distance matrix of all of the unique samples:
-// each inner array represents a single sample for ease of
-// access / modification
 
-def calculateDistances(events: Array[Event], eventToDistance: HashMap[String,Double], noneScore: Double = 0): Array[Array[Double]] = {
-  var distances = Array[Array[Double]]()
-
-  events.foreach{event => {
-    val innnerDistance = new Array[Double](events.size)
-    events.zipWithIndex.foreach{case(event2,index) => {
-        innnerDistance(index) = event.eventStrings.zip(event2.eventStrings).map{case(evt1,evt2) => {
-          if (evt1 == "NONE" && evt2 == "NONE")
-            noneScore
-          else if (evt1 == "NONE" && evt2 != "NONE")
-            eventToDistance(evt2)
-          else if (evt1 != "NONE" && evt2 == "NONE")
-            eventToDistance(evt1)
-          else if (evt1 != evt2)
-            eventToDistance(evt1) + eventToDistance(evt2)
-          else
-            0
-        }}.sum
-    }}
-    distances :+= innnerDistance
-  }}
-  return distances
-}
 
 var distances = calculateDistances(events,eventToDistance)
 //distances.foreach{col => println(col.mkString(","))}
@@ -206,10 +210,6 @@ var indexToEvent = new HashMap[Int,Event]()
 events.zipWithIndex.foreach{case(event,index) => indexToEvent(index) = event}
 println("Starting nodes: " + indexToEvent.size)
 
-// cache the minimum for each column
-val columnToMinPosition = new HashMap[Int,Int]()
-
-var mergeID = 0
 
 println("calculating global site compatibility....")
 // the compatibility test is taking a loooot of time, cache the results, so we only
@@ -223,13 +223,32 @@ events.foreach{event1 => {
   }}
 }}
 
+// cache the minimum for each column
+var columnToMinPositionTemp = ArrayBuilder.make[Int]
+distances.zipWithIndex.foreach{case(column, index) => {
+  var minValue = Double.MaxValue
+  var minPosition = -1
+  for (i <- 0 until column.size) {
+    if (i != index && column(i) < minValue && compatibility(indexToEvent(index))(indexToEvent(i))) {
+      minValue = column(i)
+      minPosition = i
+    }
+  }
+  columnToMinPositionTemp += minPosition
+}}
+var columnToMinPosition = columnToMinPositionTemp.result
+
+
+var mergeID = 0
+
+
 // now the main session: take the distance matrix and perform constrained neighbor joining
 var still_nodes_compatible = true
 val debug = false
 
 println("Performing merges (dot per merge)")
 while (still_nodes_compatible) {
-  print(".")
+  print(".") // + distances.size)
   // find a list of nodes that satisfy the neightbor joining criteria
 
   // find the average distances
@@ -246,19 +265,29 @@ while (still_nodes_compatible) {
   // now find the i and j for which min(Dij - Ui - Uj) <AND> the merge is compatible
   var mini = -1
   var minj = -1
-  var minimumDijUiUj = Double.MaxValue
-  (0 until distances.size).foreach{i => {
-    (0 until distances.size).foreach{j => {
-      if (i != j && compatibility(indexToEvent(i))(indexToEvent(j))) {
-        val dist = distances(i)(j) - (mu(i) + mu(j))
-        if (dist < minimumDijUiUj) {
-          mini = i
-          minj = j
-          minimumDijUiUj = dist
-        }
+
+  // make the minimum finding much faster -- we've cached the location of the minimum in every column (that's compatible), find the mini,minj
+  // by finding the min of the columns.
+  var minCol = -1
+  var minValue = Double.MaxValue
+
+  if (debug) {
+    println("columnToMinPosition.size " + columnToMinPosition.size)
+    println("distances.size " + distances.size)
+  }
+  for (i <- 0 until columnToMinPosition.size) {
+      if (columnToMinPosition(i) >= 0 && columnToMinPosition(i) >= 0 && distances(i)(columnToMinPosition(i)) < minValue) {
+        minValue = distances(i)(columnToMinPosition(i))
+        minCol = i
       }
-    }}
-  }}
+  }
+
+  println("mini " + mini + " minj " + minj)
+  mini = minCol
+  if (mini >= 0)
+    minj = columnToMinPosition(mini)
+
+
   if (debug)
     print("$")
   // did we find a pair to merge?
@@ -282,6 +311,9 @@ while (still_nodes_compatible) {
       mini = minj
       minj = tmp
     }
+    if (mini == minj) {
+      throw new IllegalStateException("Crap " + mini + " is equal to " + minj)
+    }
 
     countFile.write("MERGING\t" + indexToEvent(mini).sample + "\t" + indexToEvent(minj).sample + "\t" + indexToEvent(mini).eventStrings.mkString("\t") + "\t" + indexToEvent(minj).eventStrings.mkString("\t") + "\n")
 
@@ -289,34 +321,99 @@ while (still_nodes_compatible) {
     val merged = indexToEvent(mini).merge(indexToEvent(minj), branchDisti, branchDistj, mergeID)
     mergeID += 1
 
+    // rescale the compatibility matrix
+    compatibility(merged) = new HashMap[Event,Boolean]()
+    indexToEvent.foreach{case(index,event) => {
+      compatibility(event)(merged) = event.compatible(merged)
+      compatibility(merged)(event) = merged.compatible(event)
+    }}
+
     if (debug)
       print("!")
     // recompute the distance for our new node and put this into the tree
-    // SLOW FIX ME
     var newDistance = Array[Array[Double]]()
+    var columnToMinPositionTempOld = ArrayBuilder.make[Int]
     var savedLastColumn = ArrayBuilder.make[Double] // shortcut -- we save the last row which equals the last column plus a zero on the end
-
+    if (debug)
+      println("mini " + mini + " minj " + minj + " " + minValue)
+    var newIndex = 0
     for (a <- 0 until distances.size) {
       if (a != mini && a != minj) {
         var newDistanceInner = ArrayBuilder.make[Double]
         newDistanceInner ++= distances(a).slice(0,mini)
         newDistanceInner ++= distances(a).slice(mini+1,minj)
         newDistanceInner ++= distances(a).slice(minj+1,distances.length)
-        newDistanceInner += ((distances(a)(mini) + distances(a)(mini) - distances(mini)(minj)) / 2.0)
-        newDistance :+= newDistanceInner.result
-        savedLastColumn += ((distances(a)(mini) + distances(a)(mini) - distances(mini)(minj)) / 2.0)
+        val newNodeDist = ((distances(a)(mini) + distances(a)(mini) - distances(mini)(minj)) / 2.0)
+        newDistanceInner += newNodeDist
+        val newDist = newDistanceInner.result
+
+        newDistance :+= newDist
+        savedLastColumn += newNodeDist
+
+        val oldValue = columnToMinPosition(a)
+
+        var step = ""
+        // fix the min distance counts -- if we used to have mini or minj as our
+        // min (an unlikely tie)
+        //println("before " + columnToMinPosition(a))
+        //if (columnToMinPosition(a) == mini || columnToMinPosition(a) == minj) {
+          step = "REFIND"
+          var minV = Double.MaxValue
+          var minP = -1
+          for (i <- 0 until newDist.size) {
+            if (i != newIndex && newDist(i) < minValue && compatibility(indexToEvent(a))(indexToEvent(i))) {
+              minV = newDist(i)
+              minP = i
+            }
+          }
+          columnToMinPosition(a) = minP
+        /*} else {
+          columnToMinPosition(a) = columnToMinPosition(a) - (a - newIndex)
+        }
+
+        if (compatibility(merged)(indexToEvent(a)) && columnToMinPosition(a) >= 0 && distances(a)(columnToMinPosition(a)) > newNodeDist) {
+          step = "final"
+          columnToMinPosition(a) = newDist.length - 1
+        }
+        //println("after " + columnToMinPosition(a))
+        */
+        columnToMinPositionTempOld += columnToMinPosition(a)
+
+        if (columnToMinPosition(a) == columnToMinPositionTempOld.result.size) {
+          print("OLD value = " + oldValue + " new value " + columnToMinPosition(a) + " column " + columnToMinPositionTempOld.result.size)
+          println(" vect " + newDist.size + " step " + step + " mini " + mini + " minj " + minj)
+        }
+        newIndex += 1
       }
     }
+
+    savedLastColumn += 0.0// last column becomes the last row plus zero (self distance)
+    val slcResult = savedLastColumn.result
+    newDistance :+=slcResult
+
+    var minVal = Double.MaxValue
+    var minPos = -1
+    for (i <- 0 until (slcResult.size - 1)) {
+      if (slcResult(i) < minValue && compatibility(merged)(indexToEvent(i))) {
+        minVal = slcResult(i)
+        minPos = i
+      }
+    }
+
+    columnToMinPositionTempOld += minPos
+    columnToMinPosition = columnToMinPositionTempOld.result
+    if (debug) {
+      println()
+      println("coltominpos size = " + columnToMinPosition.size)
+      println("Size = " + columnToMinPosition.size)
+    }
+
     if (debug)
       print("_")
-    savedLastColumn += 0.0// last column becomes the last row plus zero (self distance)
-    newDistance :+= savedLastColumn.result
-    //println(newDistance.size + " " + distances.size)
-    //println(newDistance(0).size + " " + distances(0).size)
-    //println(newDistance(newDistance.size-1).size  + " " + distances(distances.size - 1).size)
-    //println()
-    distances = newDistance
 
+    distances = newDistance
+    if (debug)
+      println("distances " + distances.size)
     var newIndexToEvent = new HashMap[Int,Event]()
     var cnt = 0
     for (i <- 0 until indexToEvent.size) {
@@ -328,13 +425,6 @@ while (still_nodes_compatible) {
     newIndexToEvent(cnt) = merged
     if (debug)
       print("_")
-    // rescale the compatibility matrix
-    compatibility(merged) = new HashMap[Event,Boolean]()
-    indexToEvent.foreach{case(index,event) => {
-      compatibility(event)(merged) = event.compatible(merged)
-      compatibility(merged)(event) = merged.compatible(event)
-    }}
-
 
     indexToEvent = newIndexToEvent
     if (debug)
