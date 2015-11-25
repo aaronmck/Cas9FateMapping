@@ -1,8 +1,8 @@
 package main.scala
 
-import _root_.utils.{CutSites, CutSite, Clustering}
-import aligner.{SmithWaterman, PairedReadsToEdits, MAFFT, Clustalo}
-import aligner.aligner.Waterman
+import _root_.utils.{CutSites, Clustering}
+import aligner._
+import _root_.aligner.aligner.Waterman
 
 import scala.io._
 import java.io._
@@ -112,7 +112,9 @@ object OutputManager {
   def mergeTogether(umi: String,
                     readsF: Array[SequencingRead],
                     readsR: Array[SequencingRead],
-                    cutSites: Array[CutSite],
+                    cutSites: CutSites,
+                    outputFastq1: PrintWriter,
+                    outputFastq2: PrintWriter,
                     outputStats: PrintWriter,
                     ref: String,
                     refFile: File,
@@ -120,7 +122,7 @@ object OutputManager {
                     sample: String,
                     minSurvivingReads: Int,
                     cutSiteInfo: CutSites
-                     ): Tuple2[Int, Int] = {
+                     ): Int = {
 
 
     // get containers for the forward and reverse reads
@@ -129,8 +131,6 @@ object OutputManager {
 
     var matchingFor = 0
     var matchingRev = 0
-    var total = 0
-    var kept = 0
 
     readsF.zip(readsR).foreach { case (fwd, rev) => {
       val containsForward = fwd.startsWithPrimer(primers(0))
@@ -138,24 +138,21 @@ object OutputManager {
 
       if (containsForward) matchingFor += 1
       if (containsReverse) matchingRev += 1
-      total += 1
 
       //println(reverseComplement(primers(1)))
       if (containsForward && containsReverse) {
         newReadsF :+= fwd
         newReadsR :+= rev
-        kept += 1
       }
     }
     }
 
     val warn = true
-    if (newReadsF.size < minSurvivingReads && warn) {
-      println("WARN: dropping umi " + umi + " since we have less than two surviving reads. FM = " + matchingFor + " RV = " + matchingRev + " total = " + total)
-      return (kept, total)
+    if (matchingFor < minSurvivingReads || matchingRev < minSurvivingReads) {
+      ///println("WARN: dropping umi " + umi + " since we have less than two surviving reads. FM = " + matchingFor + " RV = " + matchingRev)
+      return 0
     } else {
-      println("INFO: keeping umi " + umi + " since we have more than two surviving reads. FM = " + matchingFor + " RV = " + matchingRev + " total = " + total)
-
+      //println("INFO: keeping umi " + umi + " since we have more than two surviving reads. FM = " + matchingFor + " RV = " + matchingRev)
     }
 
     // some constants we should probably bubble-up
@@ -165,69 +162,65 @@ object OutputManager {
     try {
 
       // use MSA to align all the reads
-      val mergedF = Clustalo(newReadsF).postMergedReads
-      val mergedR = Clustalo(newReadsR).postMergedReads
+      val preparedFWD = Consensus.prepareConsensus(newReadsF,minReadLength,minMeanQualScore)
+      val preparedREV = Consensus.prepareConsensus(newReadsR,minReadLength,minMeanQualScore)
 
-      // remove the reads that are a really poor match
-      val fwdCleanedUp = Consensus.removeMismatchedReads(mergedF)
-      val revCleanedUp = Consensus.removeMismatchedReads(mergedR)
+      //println("Pre forward: " + newReadsF.size + " post: " + preparedFWD.size + ", Pre reverse: " + newReadsR.size + " post: " + preparedREV.size)
 
-      // make a consensus from the remaining 'good' reads
-      val fwdConsensus = Array[SequencingRead](Consensus.consensus(fwdCleanedUp))
-      val revConsensus = Array[SequencingRead](Consensus.consensus(revCleanedUp))
+      if (preparedFWD.size > 1 && preparedREV.size > 1) {
 
-      // now align this to the reference using BWA
-      val fwdAligned = SmithWaterman(fwdConsensus, refFile).alignedReads()
-      val revAligned = SmithWaterman(revConsensus, refFile).alignedReads()
+        val mergedF = MAFFT2.alignTo(preparedFWD,None)
+        val mergedR = MAFFT2.alignTo(preparedREV,None)
 
-      println(fwdAligned.size)
-      println(revAligned.size)
-      // now get the cigar events for both strings
-      val pairedEdits = PairedReadsToEdits(fwdAligned(0), revAligned(0),ref,cutSiteInfo)
-      /*
-      // remove the adapters, or anything that aligns past the ends of the reference on either side
-      val adapterStripped = Consensus.referenceStrip(mergedF.postMergedReads ++ mergedR.postMergedReads)
+        // remove the reads that are a really poor match
+        val fwdCleanedUp = Consensus.removeMismatchedReads(mergedF)
+        val revCleanedUp = Consensus.removeMismatchedReads(mergedR)
 
-      // remove bad reads -- reads that don't align to our target well
-      //val failedReadsRemoved = Consensus.removeMismatchedReads(adapterStripped)
+        if (fwdCleanedUp.size > 1 && revCleanedUp.size > 1) {
 
-      // 2nd round: merge the passing reads with the reference and realign
-      val screenReads2 = Consensus.dualConsensus(
-        Consensus.prepareConsensus(adapterStripped, minReadLength, minMeanQualScore)
-        ,minReadLength, minMeanQualScore)
+          // make a consensus from the remaining 'good' reads
+          val fwdConsensus = SequencingRead.stripDownToJustBases(Consensus.consensus(fwdCleanedUp))
+          val revConsensus = SequencingRead.stripDownToJustBases(Consensus.consensus(revCleanedUp))
 
-      val secondRoundMerged = BWAMem(screenReads2, refFile).alignedReads()
-      println(secondRoundMerged.size)
+          //val mafftAlign = MAFFT2(fwdConsensus(0), revConsensus(0), ref, cutSiteInfo, primers)
 
-      // we have a foward and reverse primer in the reads
-      val forwardPrimer = secondRoundMerged(0).bases contains primers(0)
-      val reversePrimer = secondRoundMerged(1).bases contains primers(1) // (Utils.reverseComplement(primers(1)))
-      val usingRead = forwardPrimer && reversePrimer
+          val forwardPrimer = fwdConsensus.bases contains primers(0)
+          val reversePrimer = Utils.reverseComplement(revConsensus.bases) contains primers(1)
+          val readsKept = (mergedF.size + mergedR.size).toDouble / (readsF.size + readsR.size).toDouble
 
-      // now get the cigar events for both strings
-      val pairedEdits = PairedReadsToEdits(secondRoundMerged(0), secondRoundMerged(1),ref,cutSiteInfo)
+          var failureReason = ""
+          if (readsKept < 0.5) failureReason += "notEnoughReadsRemaining;"
+          if (!forwardPrimer) failureReason += "forwardPrimerMissing;"
+          if (!reversePrimer) failureReason += "reversePrimerMissing;"
+          //if (!enoughReadsKept) failureReason += "notEnoughReadsRemaining;"
 
-      val readsKept = failedReadsRemoved.size.toDouble / (mergedF.postMergedReads ++ mergedR.postMergedReads).size.toDouble
+          if (failureReason == "") {
+            failureReason = "PASS"
+            outputFastq1.write(fwdConsensus.toFastqString(umi + "FWD", true) + "\n")
+            outputFastq2.write(revConsensus.toFastqString(umi + "REV", false) + "\n")
+          }
 
-      var failureReason = ""
-      if (readsKept < 0.8) failureReason += "notEnoughReadsRemaining;"
-      if (!forwardPrimer) failureReason += "forwardPrimerMissing;"
-      if (!reversePrimer) failureReason += "reversePrimerMissing;"
-      if (failureReason == "") failureReason = "PASS"
+          // get the overlap of cutsite events
+          val cutEvents = MAFFT2.cutSiteEvents(ref,fwdConsensus,revConsensus,cutSites,6)
 
-      // write out the stats file information
-      outputStats.write(umi + "\t" + usingRead + "\t" + failureReason + "\t")
-      outputStats.write(readsF.size + "\t" + newReadsF.size + "\t")
-      outputStats.write(readsR.size + "\t" + newReadsR.size + "\t")
-      outputStats.write(secondRoundMerged(0).cigar.get + "\t" + secondRoundMerged(1).cigar.get + "\t")
-      outputStats.write(pairedEdits.mergedEvents.mkString("\t") + "\n")
-      */
-      return (kept, total)
+          //write out the stats file information
+          outputStats.write(umi + "\t" + readsKept + "\t" + failureReason + "\t")
+          outputStats.write(readsF.size + "\t" + newReadsF.size + "\t" + mergedF.size + "\t")
+          outputStats.write(readsR.size + "\t" + newReadsR.size + "\t" + mergedR.size + "\t")
+          outputStats.write(fwdConsensus.bases + "\t" + revConsensus.bases + "\t" + cutEvents._1 + "\t" + cutEvents._2 + "\t" + cutEvents._3.mkString("\t") + "\n")
+          //outputStats.write(pairedEdits.mergedEvents.mkString("\t") + "\n") */
+
+
+
+
+        }
+      }
+      return 1
     } catch {
       case e: Exception => {
         println("Unable to process UMI " + umi)
-        e.printStackTrace()
-        return (0, 0)
+        throw e
+        //return (0, 0)
       }
     }
   }

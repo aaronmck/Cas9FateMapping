@@ -16,7 +16,6 @@ object Consensus {
    * return the consensus read and proportion of bases at each position that match the called base
    *
    * @param reads the reads to make a consensus over
-   * @param readLength the read length -- just passed out of convenience
    * @return a tuple, representing the concensus read and the per-base error rate over positions in that read
    */
   def consensus(reads: Array[SequencingRead]): SequencingRead = {
@@ -36,7 +35,8 @@ object Consensus {
       var maxChar = 'U'
       var total = 0
       bases.foreach { case (base, count) => {
-        if (!(bases contains maxChar) || count > bases(maxChar)) maxChar = base
+        if (maxChar == 'U' || count > bases(maxChar)) maxChar = base
+        if (count == bases(maxChar) && maxChar == '-') maxChar = base // favor a base over a dash
         total += count
       }
       }
@@ -49,7 +49,7 @@ object Consensus {
     SequencingRead("Consensus",
       highestOccuringBase.mkString(""),
       "H" * highestOccuringBase.length, // highestOccuringBaseProp.map{pr => Utils.probabilityOfErrorToPhredChar(1.0 - pr)}.mkString(""),
-      reads(0).readOrientation,
+      if (reads.size == 0) ForwardReadOrientation else reads(0).readOrientation,
       "")
   }
 
@@ -108,7 +108,7 @@ object Consensus {
    * given forward and backwards reads (throw in a reference read to be sure), call cigar events from it
    * @param reads the reads to develop a consensus from, including a reference read
    * @return a read with the dashes split-out
-   */
+
   def callEvents(reads: Array[SequencingRead], minReadLength: Int, minMeanQualScore: Double): (SequencingRead, SequencingRead, Array[CigarHit]) = {
 
     val (fwdReads: Array[SequencingRead], revReads: Array[SequencingRead], refRead: Array[SequencingRead]) = splitReadsToFwdRevRefArrays(reads)
@@ -129,7 +129,7 @@ object Consensus {
     //val
 
     return (fwdConcensus, revConcensus, fwdCigar ++ revCigar)
-  }
+  } */
 
   /**
    * given the reference sequence as the first read in a multiread alignment, strip off columns before the reference's
@@ -203,11 +203,11 @@ object Consensus {
    * @param reads all reads as an array of SequencingRead
    * @return an array of sequencing reads with the reference in it
    */
-  def prepareConsensus(reads: Array[SequencingRead],
-                       minimumReadLength: Int,
-                       minimumQualScore: Double): Array[SequencingRead] = {
+    def prepareConsensus(reads: Array[SequencingRead],
+                         minimumReadLength: Int,
+                         minimumQualScore: Double): Array[SequencingRead] = {
     // check that our reads meet the minimum thresholds to be merged
-    val filteredReads = checkReadsMetMinimumInputQuality(reads, minimumReadLength, minimumQualScore)
+    val filteredReads =   checkReadsMetMinimumInputQuality(reads, minimumReadLength, minimumQualScore)
 
     // create a consensus of reference, forward, and reverse reads
     filteredReads
@@ -282,10 +282,13 @@ object Consensus {
       val quals = read.intQuals.zipWithIndex.filter { case (qual, index) => read.quals(index) != '-' }.map { case (q, i) => q }.toArray
       val qualSum = quals.sum.toDouble
       var valid = true
-      if (read.length < minimumReadLength)
+      if (read.length < minimumReadLength) {
+        //println("SHORT: Dropping read " + read.umi + " quals " + read.intQuals.mkString(",") + " with min qual " + (qualSum / quals.length.toDouble) + " old len " + read.intQuals.length)
         valid = false
+      }
+
       if (qualSum / quals.length.toDouble < minimumMeanQualScore) {
-        println("Dropping read " + read.umi + " quals " + read.intQuals.mkString(",") + " with min qual " + (qualSum / quals.length.toDouble) + " old len " + read.intQuals.length)
+        //println("QUAL: Dropping read " + read.umi + " quals " + read.intQuals.mkString(",") + " with min qual " + (qualSum / quals.length.toDouble) + " old len " + read.intQuals.length)
         valid = false
       }
 

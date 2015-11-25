@@ -1,6 +1,6 @@
 package main.scala
 
-import _root_.utils.{CutSites, CutSite}
+import _root_.utils.{CutSites}
 import utils.Utils
 
 import scala.io._
@@ -39,7 +39,10 @@ import java.util.zip._
  */
 case class Config(inputFileReads1: File = new File(Main.NOTAREALFILENAME),
                   inputFileReads2: File = new File(Main.NOTAREALFILENAME),
+                  outputFastq1: File = new File(Main.NOTAREALFILENAME),
+                  outputFastq2: File = new File(Main.NOTAREALFILENAME),
                   outputStats: File = new File(Main.NOTAREALFILENAME),
+                  outputAlignments: File = new File(Main.NOTAREALFILENAME),
                   cutSites: File = new File(Main.NOTAREALFILENAME),
                   umiLength: Int = 1,
                   umiStartPos: Int = 0,
@@ -63,6 +66,8 @@ object Main extends App {
     // *********************************** Inputs *******************************************************
     opt[File]("inputFileReads1") required() valueName ("<file>") action { (x, c) => c.copy(inputFileReads1 = x) } text ("first read file ")
     opt[File]("inputFileReads2") required() valueName ("<file>") action { (x, c) => c.copy(inputFileReads2 = x) } text ("second reads file")
+    opt[File]("outputFastq1") required() valueName ("<file>") action { (x, c) => c.copy(outputFastq1 = x) } text ("the output stats file")
+    opt[File]("outputFastq2") required() valueName ("<file>") action { (x, c) => c.copy(outputFastq2 = x) } text ("the output stats file")
     opt[File]("outputStats") required() valueName ("<file>") action { (x, c) => c.copy(outputStats = x) } text ("the output stats file")
     opt[File]("cutSites") required() valueName ("<file>") action { (x, c) => c.copy(cutSites = x) } text ("the location of the cutsites")
     opt[File]("primersEachEnd") required() valueName ("<file>") action { (x, c) => c.copy(primersEachEnd = x) } text ("the file containing the amplicon primers requred to be present, one per line, two lines total")
@@ -85,11 +90,10 @@ object Main extends App {
   parser.parse(args, Config()) map {
     config: Config => {
 
-      // our cut sites
-      val cutSites = CutSite.toCutSiteArray(config.cutSites)
-
       // our output files
-      val outputStats = new PrintWriter(config.outputStats)
+      val outputFastq1File = new PrintWriter(config.outputFastq1)
+      val outputFastq2File = new PrintWriter(config.outputFastq2)
+      val outputStatsFile =  new PrintWriter(config.outputStats)
 
       // get the reference as a string
       var referenceString = ""
@@ -124,10 +128,10 @@ object Main extends App {
         val readBuilderF =     umiReadsFWD.getOrElse(umi, new ArrayBuffer[SequencingRead]())
         val readBuilderR =     umiReadsRVS.getOrElse(umi, new ArrayBuffer[SequencingRead]())
 
-        readBuilderF +=        SequencingRead(fGroup(0),readNoUMI, qualNoUMI, ForwardReadOrientation, umi).qualityThresholdRead(5,20)
+        readBuilderF +=        SequencingRead(fGroup(0),readNoUMI, qualNoUMI, ForwardReadOrientation, umi).qualityThresholdRead(3,30)
         umiReadsFWD(umi) =     readBuilderF
 
-        readBuilderR +=        SequencingRead(rGroup(0), rGroup(1), rGroup(3), ReverseReadOrientation, umi).qualityThresholdRead(5,20)
+        readBuilderR +=        SequencingRead(rGroup(0), rGroup(1), rGroup(3), ReverseReadOrientation, umi).qualityThresholdRead(3,30)
         umiReadsRVS(umi) =     readBuilderR
 
         readsProcessed += 1
@@ -136,18 +140,18 @@ object Main extends App {
       }
       }
 
-      outputStats.write("UMI\tused\tffail.reason\tfwd.reads\tprimered.fwd.reads\tfiltered.fwd.reads\trev.reads\tprimered.rev.reads\tfiltered.rev.reads\t")
-      outputStats.write("fwd.error.rate\tfwd.read\trev.error.rate\trev.read\n")
+      //outputStats.write("UMI\tused\tffail.reason\tfwd.reads\tprimered.fwd.reads\tfiltered.fwd.reads\trev.reads\tprimered.rev.reads\tfiltered.rev.reads\t")
+      //outputStats.write("fwd.error.rate\tfwd.read\trev.error.rate\trev.read\n")
+      outputStatsFile.write("UMI\tkeptPCT\tfail.reason\tinitF\tfilteredF\tfinalF\tinitR\tfilteredR\tfinalR\treadF\treadR\tfwdBasesMatching\trevBasesMatching\t")
 
       var passingUMI = 0
       var totalWithUMI = 0
-      var usedReads = 0
 
       println("\nProcessing " + umiReadsFWD.size + " UMIs")
       var index = 0
 
-      val cutsSiteObj = CutSites(config.cutSites, 3)
-
+      val cutsSiteObj = CutSites.fromFile(config.cutSites, 3)
+      outputStatsFile.write(cutsSiteObj.windows.zipWithIndex.map{case(wds,index) => "target" + (index+1)}.mkString("\t") + "\n")
       // --------------------------------------------------------------------------------
       // for each UMI -- process its individual reads
       // --------------------------------------------------------------------------------
@@ -159,8 +163,10 @@ object Main extends App {
           val res = OutputManager.mergeTogether(umi,
             forwardReads,
             reverseReads,
-            cutSites,
-            outputStats,
+            cutsSiteObj,
+            outputFastq1File,
+            outputFastq2File,
+            outputStatsFile,
             referenceString,
             config.reference,
             primers,
@@ -168,9 +174,7 @@ object Main extends App {
             config.minimumSurvivingUMIReads,
             cutsSiteObj)
 
-          totalWithUMI += res._2
-          usedReads += res._1
-          passingUMI += 1
+          passingUMI += res
         }
         index += 1
         if (index % 100 == 0) {
@@ -179,11 +183,11 @@ object Main extends App {
       }
       }
 
-      println("Summary:\ntotal reads:\t" + readsProcessed + "\ntotal reads withing a valid UMI:\t")
-      println(totalWithUMI + "\ntotal reads used for consensus reads:\t" + usedReads + "\ntotal passing UMIs:\t" + passingUMI)
+      println("total UMIs passed:\t" + passingUMI + "\ntotal UMIs considered:\t" + umiReadsFWD.size)
 
-      outputStats.close()
-
+      outputFastq1File.close()
+      outputFastq2File.close()
+      outputStatsFile.close()
     }
   } getOrElse {
     println("Unable to parse the command line arguments you passed in, please check that your parameters are correct")

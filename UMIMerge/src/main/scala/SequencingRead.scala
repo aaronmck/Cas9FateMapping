@@ -82,7 +82,18 @@ case class SequencingRead(name: String, bases: String, quals: String, readOrient
    *
    * @return a string representing the read in fastq format
    */
-  def toFastqString(umi: String): String = "@" + umi + "_" + name + "\n" + bases + "\n+\n" + quals
+  def toFastqString(umi: String, rev: Boolean): String = {
+    val plusOrMinus = readOrientation match {
+      case ForwardReadOrientation => "+"
+      case ReverseReadOrientation => "+" // nevermind, this is not imporant
+      case ReferenceRead => "+" // ehh lets assume
+      case ConsensusRead => "+" // ehh lets assume
+    }
+    if (!rev)
+      "@" + umi + "_" + name + "\n" + bases + "\n" + plusOrMinus + "\n" + quals
+    else
+      "@" + umi + "_" + name + "\n" + Utils.reverseComplement(bases) + "\n" + plusOrMinus + "\n" + quals
+  }
 
 
   /**

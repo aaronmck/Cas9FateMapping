@@ -15,7 +15,7 @@ import scala.sys.process._
 // process reads to and from the clustalo algorithm
 //
 // ------------------------------------------------------------------------------------------
-case class Clustalo(reads: Array[SequencingRead]) extends Aligner {
+case class Clustalo(umi: String, reads: Array[SequencingRead]) extends Aligner {
 
   var currentReadName: Option[String] = None
   var currentRead = ""
@@ -78,11 +78,11 @@ case class Clustalo(reads: Array[SequencingRead]) extends Aligner {
    */
   def clustal_reads(): File = {
     // setup a CLUSTAL run and farm it out the machine
-    val tmp = java.io.File.createTempFile("UMIMerger", ".txt")
+    val tmp = java.io.File.createTempFile("UMIMerger" + umi, ".txt")
     val tmpWriter = new PrintWriter(tmp)
     reads.foreach { case (read) => tmpWriter.write("> " + read.name + "\n" + read.bases.filter{bs => bs != '-'}.mkString("") + "\n") }
     tmpWriter.close()
-    val tmpOutput = java.io.File.createTempFile("UMIMerger", ".post.txt")
+    val tmpOutput = java.io.File.createTempFile("UMIMerger" + umi, ".post.txt")
     val clustoResult = ("clustalo --dealign --force --pileup -i " + tmp + " -o " + tmpOutput).!!
     //println("Clustal: Input " + tmp + " and output " + tmpOutput)
     return tmpOutput
