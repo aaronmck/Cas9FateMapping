@@ -27,6 +27,13 @@ case class MAFFT2(forwardRead: SequencingRead, reverseRead: SequencingRead, refS
 
 }
 
+/**
+ * a simple case class to hold alignments -- results we get back from parsing reads aligned with MAFFTv7
+ * @param refPos the reference position for the start of the event
+ * @param refBase the reference bases over the event
+ * @param readBase the read bases over the event
+ * @param cigarCharacter the cigar character for the event -- I, D, and M are valid
+ */
 case class Alignment(val refPos: Int, refBase: String, readBase: String, cigarCharacter: String) {
   def combine(next: Alignment): Array[Alignment] =
     if (next.cigarCharacter != cigarCharacter)
@@ -41,6 +48,14 @@ case class Alignment(val refPos: Int, refBase: String, readBase: String, cigarCh
 
 object MAFFT2 {
 
+  /**
+   * call edits over a matched reference and read string
+   * @param reference the reference string
+   * @param read the read string, THE SAME LENGTH as the reference,  i.e. out of an MSA program
+   * @param minMatchOnEnd the minimum number of matches to end our calling, if we don't see an event like this we backtrack Is and Ds until we find an M of this size
+   * @param debugInfo should we dump a ton of debug info
+   * @return a list of alignments over the read/ref combo
+   */
   def callEdits(reference: String, read: String, minMatchOnEnd: Int, debugInfo: Boolean = false): List[Alignment] = {
     var referencePos = 0
     var inRef = false
@@ -88,6 +103,12 @@ object MAFFT2 {
     return filterEnds(refToEvent,minMatchOnEnd)
   }
 
+  /**
+   * filter the alignments, if we have poor matches on the ends that allow us to accept and indel, roll it back until we've matched enough bases
+   * @param eventList the list of alignments over the read
+   * @param minMatch the minimum number of match bases to 'anchor' the ends, otherwise strip the trash off
+   * @return a filtered alignment set
+   */
   def filterEnds(eventList: List[Alignment], minMatch: Int) : List[Alignment] = {
 
     // make this as clear as possible
@@ -101,11 +122,21 @@ object MAFFT2 {
       if (lastIndex < 0 && eventList(i).cigarCharacter == "M" && eventList(i).readBase.length >= minMatch)
         lastIndex = i
 
-    println(firstIndex+ " " + (lastIndex+1) + " " + "PRE: " + eventList.mkString("-") + " POST: " + eventList.slice(firstIndex,lastIndex+1).mkString("-"))
+    //println(firstIndex+ " " + (lastIndex+1) + " " + "PRE: " + eventList.mkString("-") + " POST: " + eventList.slice(firstIndex,lastIndex+1).mkString("-"))
     return (eventList.slice(firstIndex,lastIndex+1))
   }
 
 
+  /**
+   * given a read and reference, align and call events at the cut-sites
+   * @param reference ref string
+   * @param fwdRead read string
+   * @param revRead reverse read string
+   * @param cutSites the cutsutes to consider
+   * @param minMatchOnEnd the minimum number of matches on the ends to keep from peeling crappy indels off
+   * @param debug should we dump a lot of debug info
+   * @return the rate of matching for cigar "M" bases for both reads and the array of events over cutsites
+   */
   def cutSiteEvents(reference: String, fwdRead: SequencingRead, revRead: SequencingRead, cutSites: CutSites, minMatchOnEnd: Int, debug: Boolean = false): Tuple3[Double,Double,Array[String]] = {
     val alignmentsF = MAFFT2.alignTo(Array[SequencingRead](fwdRead),Some(reference),false, debug)
     val alignmentsR = MAFFT2.alignTo(Array[SequencingRead](revRead),Some(reference),true,  debug)
@@ -124,6 +155,14 @@ object MAFFT2 {
     return (matchRate1,matchRate2,combineTwoReadEdits(events1, events2, cutSites,debug))
   }
 
+  /**
+   * do two intervals overlap
+   * @param pos1Start
+   * @param pos1End
+   * @param pos2Start
+   * @param pos2End
+   * @return
+   */
   def overlap(pos1Start: Int, pos1End: Int, pos2Start: Int, pos2End: Int): Boolean = (pos1Start,pos1End, pos2Start, pos2End) match {
     case (pos1S,pos1E, pos2S, pos2E) if pos1S < pos2S && pos1E > pos2E => true
     case (pos1S,pos1E, pos2S, pos2E) if pos2S < pos1S && pos2E > pos1E => true
@@ -132,7 +171,14 @@ object MAFFT2 {
     case _ => false
   }
 
-
+  /**
+   * combine the edits over two reads
+   * @param edits1 the set of edits from read 1
+   * @param edits2 the set of edits from read 2
+   * @param cutSites the cutsites we consider
+   * @param debug should we dump a lot of debugging info
+   * @return an array of events over the target cut sites
+   */
   def combineTwoReadEdits(edits1: List[Alignment],edits2: List[Alignment], cutSites: CutSites, debug: Boolean = false): Array[String] = {
     var ret = Array[String]()
     cutSites.windows.foreach{case(start,cut,end) => {
@@ -188,8 +234,15 @@ object MAFFT2 {
     matches.toDouble / bases.toDouble
   }
 
-
-  def alignTo(reads: Array[SequencingRead],ref: Option[String], reverse: Boolean = false, debug: Boolean = false): Array[SequencingRead] ={
+  /**
+   * align two sequences
+   * @param reads a list of reads, which we pull sequence out of
+   * @param ref the reference sequence
+   * @param reverseComplement should we reverse complement the reads?
+   * @param debug dump a lot of info
+   * @return a array of aligned sequencing reads, the reference will be the first
+   */
+  def alignTo(reads: Array[SequencingRead],ref: Option[String], reverseComplement: Boolean = false, debug: Boolean = false): Array[SequencingRead] ={
     val tmp = java.io.File.createTempFile("UMIMergerBWA", ".txt")
     val tmpWriter = new PrintWriter(tmp)
     var readDirections = Array[ReadDirection]()
@@ -198,7 +251,7 @@ object MAFFT2 {
     if (ref.isDefined)
       tmpWriter.write(">reference\n" + ref.get + "\n")
     reads.foreach { rd =>
-      if (reverse)
+      if (reverseComplement)
         tmpWriter.write(">" + rd.name + "\n" + Utils.reverseComplement(rd.bases.filter { bs => bs != '-' }.mkString("")) + "\n")
       else
         tmpWriter.write(">" + rd.name + "\n" + rd.bases.filter { bs => bs != '-' }.mkString("") + "\n")
@@ -254,8 +307,12 @@ object MAFFT2 {
   }
 
 
-
-
+  /**
+   * create a sequencing read from a name a base string, just to save time in the alignment return
+   * @param name the name of the read
+   * @param bases the bases of the read
+   * @return a sequencing read
+   */
   def SequencingReadFromNameBases(name: String, bases: String): SequencingRead = {
     return SequencingRead(name,bases,"H"*bases.length,ConsensusRead,"UNKNOWN")
   }

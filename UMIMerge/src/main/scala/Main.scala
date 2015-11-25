@@ -140,6 +140,51 @@ object Main extends App {
       }
       }
 
+      // --------------------------------------------------------------------------------
+      // filter out UMIs that are really really abnormal in terms of size -- this will save
+      // us a huge amount of computation later
+      // --------------------------------------------------------------------------------
+      val readCountsPerUmiFWD = ArrayBuilder.make[Double]()
+      val readCountsPerUmiREV = ArrayBuilder.make[Double]()
+
+      umiReadsFWD.foreach{case(umi,reads) => readCountsPerUmiFWD += reads.toArray.size}
+      umiReadsRVS.foreach{case(umi,reads) => readCountsPerUmiREV += reads.toArray.size}
+
+      val fwdCounts = readCountsPerUmiFWD.result()
+      val revCounts = readCountsPerUmiREV.result()
+
+      val fwdMean = fwdCounts.map{vl => vl.toDouble / fwdCounts.length.toDouble}.sum
+      val revMean = revCounts.map{vl => vl.toDouble / fwdCounts.length.toDouble}.sum
+
+      val fwdDevs = fwdCounts.map(score => (score - fwdMean) * (score - fwdMean))
+      val revDevs = revCounts.map(score => (score - revMean) * (score - revMean))
+
+      val stddevF = Math.sqrt(fwdDevs.sum / fwdCounts.size)
+      val stddevR = Math.sqrt(revDevs.sum / revCounts.size)
+
+      val stdDevLimit = 5.0
+
+      val umisToRemove = new HashMap[String,Boolean]()
+      umiReadsFWD.foreach{case(umi,reads) => {
+        val sz = reads.toArray.size
+        if (sz > (fwdMean + (stdDevLimit*stddevF)) || sz < (fwdMean - (2*stddevF)))
+          umisToRemove(umi) = true
+      }}
+      umiReadsRVS.foreach{case(umi,reads) => {
+        val sz = reads.toArray.size
+        if (sz > (revMean + (stdDevLimit*stddevR)) || sz < (revMean - (2*stddevR)))
+          umisToRemove(umi) = true
+      }}
+
+      println("Forward mean and std = (" + fwdMean + "," + stddevF + ")")
+      println("Forward mean and std = (" + revMean + "," + stddevR + ")")
+
+      umisToRemove.foreach{case(umi,status) => {
+        println("removing UMI " + umi + " with forward size " + umiReadsFWD(umi).toArray.size + " and reverse size " + umiReadsRVS(umi).toArray.size)
+        umiReadsFWD.remove(umi)
+        umiReadsRVS.remove(umi)
+      }}
+
       //outputStats.write("UMI\tused\tffail.reason\tfwd.reads\tprimered.fwd.reads\tfiltered.fwd.reads\trev.reads\tprimered.rev.reads\tfiltered.rev.reads\t")
       //outputStats.write("fwd.error.rate\tfwd.read\trev.error.rate\trev.read\n")
       outputStatsFile.write("UMI\tkeptPCT\tfail.reason\tinitF\tfilteredF\tfinalF\tinitR\tfilteredR\tfinalR\treadF\treadR\tfwdBasesMatching\trevBasesMatching\t")
@@ -147,7 +192,7 @@ object Main extends App {
       var passingUMI = 0
       var totalWithUMI = 0
 
-      println("\nProcessing " + umiReadsFWD.size + " UMIs")
+      println("\nProcessing " + umiReadsFWD.size + " forward read UMIs and " + umiReadsRVS.size + " reverse read UMIs")
       var index = 0
 
       val cutsSiteObj = CutSites.fromFile(config.cutSites, 3)
