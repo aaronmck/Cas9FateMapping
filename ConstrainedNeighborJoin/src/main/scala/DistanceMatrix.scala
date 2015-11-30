@@ -1,5 +1,8 @@
 package main.scala
 
+import java.io.{PrintWriter, File}
+
+import scala.collection.mutable
 import scala.collection.mutable._
 
 /**
@@ -9,10 +12,13 @@ import scala.collection.mutable._
  * @param events an array of all of our events
  * @param distanceCalculator a calculator that finds the distance between two events
  */
-class DistanceMatrix(events: Array[Event], distanceCalculator: DistanceMetric) {
+class DistanceMatrix(events: Array[IndexedNode], distanceCalculator: DistanceMetric[IndexedNode]) {
+
+  // should we print debug info?
+  val debug = false
 
   // our instance variables
-  val idToEvent =     new HashMap[Int,Event]()
+  val idToEvent =     new HashMap[Int,IndexedNode]()
   val compatibility = new HashMap[Int,HashMap[Int,Boolean]]()
   val distances =     new HashMap[Int,HashMap[Int,Double]]()
   val meanDistances = new HashMap[Int,Double]()
@@ -29,7 +35,7 @@ class DistanceMatrix(events: Array[Event], distanceCalculator: DistanceMetric) {
    */
   println("Assigning event ids...")
   events.foreach{event => {
-    event.id = lastID
+    event.setID(lastID)
     lastID += 1
   }}
   println("Assigned " + (lastID - 1) + " events")
@@ -39,9 +45,9 @@ class DistanceMatrix(events: Array[Event], distanceCalculator: DistanceMetric) {
    */
   println("Recording events IDs and checking for collisions...")
   events.foreach{event => {
-    if (idToEvent contains event.id)
-      throw new IllegalStateException("Unable to add duplicate ID " + event.id + " with fancy string " + event.toFancyString())
-    idToEvent(event.id) = event
+    if (idToEvent contains event.getID())
+      throw new IllegalStateException("Unable to add duplicate ID " + event.getID() + " with fancy string ")
+    idToEvent(event.getID()) = event
   }}
 
   /**
@@ -52,9 +58,9 @@ class DistanceMatrix(events: Array[Event], distanceCalculator: DistanceMetric) {
    */
   println("Calculating compatability...")
   events.foreach{event1 => {
-    compatibility(event1.id) = HashMap[Int,Boolean]()
+    compatibility(event1.getID()) = HashMap[Int,Boolean]()
     events.foreach{event2 => {
-      compatibility(event1.id)(event2.id) = Event.compatible(event1,event2)
+      compatibility(event1.getID())(event2.getID()) = event1.compatible(event2)
     }}
   }}
 
@@ -65,22 +71,22 @@ class DistanceMatrix(events: Array[Event], distanceCalculator: DistanceMetric) {
   events.foreach { event => {
     // setup the sum, min distance, and distance map
     var sum = 0.0
-    distances(event.id) = new HashMap[Int,Double]()
+    distances(event.getID()) = new HashMap[Int,Double]()
     var thisMinDist = Double.MaxValue
 
     events.zipWithIndex.foreach { case (event2, index) => {
-      if (event.id != event2.id) {
+      if (event.getID() != event2.getID()) {
         val newDist = distanceCalculator.distance(event, event2)
-        distances(event.id)(event2.id) = newDist
+        distances(event.getID())(event2.getID()) = newDist
         sum += newDist
 
         if (newDist < thisMinDist) {
-          minDistance(event.id) = event2.id
+          minDistance(event.getID()) = event2.getID()
           thisMinDist = newDist
         }
       }
     }}
-    meanDistances(event.id) = sum / (events.length.toDouble - 2.0)
+    meanDistances(event.getID()) = sum / (math.max(3,events.length.toDouble) - 2.0)
   }}
 
   /**
@@ -88,15 +94,15 @@ class DistanceMatrix(events: Array[Event], distanceCalculator: DistanceMetric) {
    */
   println("calculating initial optimization functions...")
   events.foreach { event1 => {
-    minDistance(event1.id) = -1
+    minDistance(event1.getID()) = -1
     var thisMinDist = Double.MaxValue
 
     events.zipWithIndex.foreach { case (event2, index) => {
-      if (event1.id != event2.id) {
-        val minimizationDistance = distances(event1.id)(event2.id) - meanDistances(event1.id) - meanDistances(event2.id)
+      if (event1.getID() != event2.getID()) {
+        val minimizationDistance = distances(event1.getID())(event2.getID()) - meanDistances(event1.getID()) - meanDistances(event2.getID())
 
         if (minimizationDistance < thisMinDist) {
-          minDistance(event1.id) = event2.id
+          minDistance(event1.getID()) = event2.getID()
           thisMinDist = minimizationDistance
         }
       }
@@ -126,33 +132,38 @@ class DistanceMatrix(events: Array[Event], distanceCalculator: DistanceMetric) {
           sum += distances(eventId)(eventId2)
         }
       }}
-      meanDistances(eventId) = sum / (idToEvent.size.toDouble - 2.0)
+      meanDistances(eventId) = sum / (math.max(3,idToEvent.size.toDouble) - 2.0)
     }}
   }
 
   /**
    * add a new event to our internal registers -- this involves a fair amount of calculation for mean distances, etc.  It's a
-   * bit of a imperative mess, but oh well
+   * bit of a imperative mess, but oh well.  Also worth noting:
+   *
+   * calculating distance here is different!
    *
    * @param evt the event to add
    */
-  def addNewEvent(evt: Event): Unit = {
-    // assign this new event
-    if (evt.id >= 0)
-      throw new IllegalStateException("Unable to incorporate new node with existing id " + evt.id + " fancy.string " + evt.toFancyString())
+  def addNewInternalEvent(evt: IndexedNode, mergeFrom1id: Int, mergeFrom2id: Int): Unit = {
+    if (debug)
+      println("addinging node " + lastID + " removing " + mergeFrom1id + " and " + mergeFrom2id + " " + (distances contains mergeFrom1id) + " " + (distances contains mergeFrom1id))
 
-    evt.id = lastID
+    // assign this new event
+    if (evt.getID() >= 0)
+      throw new IllegalStateException("Unable to incorporate new node with existing id " + evt.getID() + " fancy.string " + evt.toFancyString())
+
+    evt.setID(lastID)
     lastID += 1
     //println("adding event " + evt.id)
 
     /**
      * add this event to the compatibility hashmaps
      */
-    compatibility(evt.id) = new HashMap[Int,Boolean]()
+    compatibility(evt.getID()) = new HashMap[Int,Boolean]()
     idToEvent.foreach{case(otherID, event2) => {
-      val compat = Event.compatible(evt,event2)
-      compatibility(evt.id)(otherID) = compat
-      compatibility(otherID)(evt.id) = compat
+      val compat = evt.compatible(event2)
+      compatibility(evt.getID())(otherID) = compat
+      compatibility(otherID)(evt.getID()) = compat
     }}
 
     /**
@@ -160,43 +171,55 @@ class DistanceMatrix(events: Array[Event], distanceCalculator: DistanceMetric) {
      * updating the mean distances as we go
      */
     // calculate the distances
-    distances(evt.id) = new HashMap[Int,Double]()
+    distances(evt.getID()) = new HashMap[Int,Double]()
     var sum = 0.0
 
-    idToEvent.foreach{case(otherID, event2) => {
-      val dist = distanceCalculator.distance(evt,event2)
+    val oneToTwo = distances(mergeFrom1id)(mergeFrom2id)
 
-      distances(evt.id)(otherID) = dist
-      distances(otherID)(evt.id) = dist
-      sum += dist
+    idToEvent.foreach{case(otherID, event2) => {
+
+      if (otherID != mergeFrom1id && otherID != mergeFrom2id) {
+        val oneToOther = distances(mergeFrom1id)(otherID)
+        val twoToOther = distances(mergeFrom2id)(otherID)
+
+        val dist = (oneToOther + twoToOther - oneToTwo)/2.0
+        if (debug) {
+          print("ADDING dist " + dist + " for one " + idToEvent(otherID).getEventStrings()(0))
+          println(" distance between " + oneToTwo + " oneToOther " + oneToOther + " twoToOther " + twoToOther)
+        }
+
+        distances(evt.getID())(otherID) = dist
+        distances(otherID)(evt.getID()) = dist
+        sum += dist
+      }
     }}
-    meanDistances(evt.id) = sum / (idToEvent.size.toDouble - 1.0)
+    meanDistances(evt.getID()) = sum / (math.max(3,idToEvent.size.toDouble) - 1.0)
 
     /**
      * now that we have the mean for this node, find it's (and other) min values
      */
     var thisMinDist = Double.MaxValue
     idToEvent.foreach{case(otherID, event2) => {
-      val minimizationDistance = distanceCalculator.distance(evt,event2) - meanDistances(evt.id) - meanDistances(event2.id)
+      val minimizationDistance = distanceCalculator.distance(evt,event2) - meanDistances(evt.getID()) - meanDistances(event2.getID())
 
-      val compat = compatibility(evt.id)(otherID) && compatibility(otherID)(evt.id)
+      val compat = compatibility(evt.getID())(otherID) && compatibility(otherID)(evt.getID())
 
       if (minimizationDistance < thisMinDist && compat) {
-        minDistance(evt.id) = otherID
+        minDistance(evt.getID()) = otherID
         thisMinDist = minimizationDistance
       }
 
       val otherMin = minDistance(otherID)
      if (compat && (otherMin < 0 || minimizationDistance < distances(otherID)(otherMin))) {
-        minDistance(otherID) = evt.id
+        minDistance(otherID) = evt.getID()
       }
     }}
-    if (!(minDistance contains evt.id))
-      minDistance(evt.id) = -1
+    if (!(minDistance contains evt.getID()))
+      minDistance(evt.getID()) = -1
 
     // we add it to the mapping of events last, so that we can loop over this hashmap earlier
-    idToEvent(evt.id) = evt
-    recalculateMeans()
+    idToEvent(evt.getID()) = evt
+
   }
 
   /**
@@ -236,8 +259,6 @@ class DistanceMatrix(events: Array[Event], distanceCalculator: DistanceMetric) {
         minDistance(fromNode) = findNewMin(fromNode)
       }
     }}
-
-    recalculateMeans()
   }
 
   /**
@@ -262,7 +283,7 @@ class DistanceMatrix(events: Array[Event], distanceCalculator: DistanceMetric) {
    * find the next two closest events, and return this pair, if there isn't a valid pair return None
    * @return the pair of events that are closest: THIS is destructive, removing that pair
    */
-  def findAndMergeNextClosestPair(): Option[Event] = {
+  def findAndMergeNextClosestPair(useConstrained: Boolean): Option[IndexedNode] = {
 
     // first find the min distance
     var min = Double.MaxValue
@@ -271,8 +292,14 @@ class DistanceMatrix(events: Array[Event], distanceCalculator: DistanceMetric) {
 
     minDistance.foreach { case(eventID, otherMinEvent) => {
       if (otherMinEvent >= 0) {
-        val compat = compatibility(eventID)(otherMinEvent) && compatibility(otherMinEvent)(eventID)
+        val compat = if (useConstrained)
+          compatibility(eventID)(otherMinEvent) && compatibility(otherMinEvent)(eventID)
+        else
+            true
+
         val dst = distances(eventID)(otherMinEvent) - meanDistances(eventID) - meanDistances(otherMinEvent)
+        if (debug)
+          println("DST: id = " + eventID + " other id = " + otherMinEvent + " dst = " + dst + " distance = " + distances(eventID)(otherMinEvent) + " mean1 " + meanDistances(eventID) + " mean2 "+  meanDistances(otherMinEvent))
 
         if (eventID != otherMinEvent && dst < min && compat) {
           min = dst
@@ -286,6 +313,8 @@ class DistanceMatrix(events: Array[Event], distanceCalculator: DistanceMetric) {
     if (minIndex < 0)
       return None
 
+    if (debug)
+      println("MIN is " + min)
     // now get the two events, drop them from our internal tracking variables, and return them
     val eventID1 = minIndex
     val eventID2 = minOtherIndex
@@ -298,17 +327,29 @@ class DistanceMatrix(events: Array[Event], distanceCalculator: DistanceMetric) {
     val branchDisti = (0.5 * distances(eventID1)(eventID2)) + (0.5 * (meanDistances(eventID1) - meanDistances(eventID2)))
     val branchDistj = (0.5 * distances(eventID1)(eventID2)) + (0.5 * (meanDistances(eventID2) - meanDistances(eventID1)))
 
+    if (debug)
+      println("branchi = " + branchDisti + " branchDistj " + branchDistj)
+
     // now merge the two events down to a single event
     try {
-      val newEvent = Event.merge(idToEvent(eventID1), idToEvent(eventID2), branchDisti, branchDistj, lastID)
+      val newEvent = idToEvent(eventID1).merge(idToEvent(eventID2), branchDisti, branchDistj, lastID, useConstrained)
       lastID += 1
+
+      // add the new events
+      addNewInternalEvent(newEvent,eventID1,eventID2)
 
       // remove the old events
       removeEventID(eventID1)
       removeEventID(eventID2)
 
-      // add the new events
-      addNewEvent(newEvent)
+      // find new mean values
+      recalculateMeans()
+
+      if (debug)
+        idToEvent.foreach{case(index,ode)  => {
+          println(ode.getEventStrings()(0) + " => " + idToEvent.map{case(index2,ode) =>
+            if (index != index2) ode.getEventStrings()(0) + "-" + distances(index)(index2) else ode.getEventStrings()(0) + "-" + 0.0}.mkString("\t"))
+        }}
 
       return(Some(newEvent))
     } catch {
@@ -329,10 +370,8 @@ class DistanceMatrix(events: Array[Event], distanceCalculator: DistanceMetric) {
    *
    * @return the set of minimum values
    */
-  def minimizeSet(printStatus: Boolean = true): Array[Event] = {
-    if (printStatus)
-      print("<Minimize the final set of nodes>")
-    while(findAndMergeNextClosestPair().isDefined) {
+  def minimizeSet(useConstraints: Boolean, printStatus: Boolean = true): Array[IndexedNode] = {
+    while(findAndMergeNextClosestPair(useConstraints).isDefined) {
       if (printStatus)
         print(".")
     }
@@ -343,4 +382,19 @@ class DistanceMatrix(events: Array[Event], distanceCalculator: DistanceMetric) {
 
     ret
   }
+
+  /**
+   * write the distance matrix for our file
+   * @param outputFile the file to write to
+   */
+  def toDistanceFile(outputFile: File): Unit = {
+    val output = new PrintWriter(outputFile.getAbsolutePath)
+
+    output.write("othernode\t" + 0.until(lastID).map{case(id) => id}.mkString("\t") + "\n")
+    0.until(lastID).map{case(id) => {
+      output.write(id + "\t" + 0.until(lastID).map{case(thisid) => distances(id).getOrElse(thisid,0)}.mkString("\t") + "\n")
+    }}
+    output.close()
+  }
+
 }

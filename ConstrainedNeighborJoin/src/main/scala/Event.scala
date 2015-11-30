@@ -9,7 +9,7 @@ import scala.util.Random
 // Helper class -- contains most things we know about one of our events
 //
 // ------------------------------------------------------------------------------------------------------------------------
-case class Event(name: String, sample: String, numberOfReads: Int, eventStrings: Array[String], inferred: Boolean = false) {
+case class Event(name: String, sample: String, numberOfReads: Int, proportionOfReads: Double, eventStrings: Array[String], inferred: Boolean = false) extends IndexedNode {
 
   var left: Option[Event] = None
   var right: Option[Event] = None
@@ -17,6 +17,20 @@ case class Event(name: String, sample: String, numberOfReads: Int, eventStrings:
   var branchRight = 0.0
   var id = -1
 
+  def setID(idVal: Int) = {id = idVal}
+  def getID() = id
+  def getCount() = numberOfReads
+  def getSample() = sample
+  def merge(otherNode: IndexedNode, branchLeft: Double, branchRight: Double, newID: Int, constrained: Boolean): IndexedNode = otherNode match {
+    case other: Event => Event.merge(this,otherNode.asInstanceOf[Event],branchLeft,branchRight,newID,constrained)
+    case _ => throw new IllegalStateException("Trying to merge a non-Event of IndexedNode with an Event")
+  }
+  def compatible(otherNode: IndexedNode): Boolean = otherNode match {
+    case other: Event => Event.compatible(this, otherNode.asInstanceOf[Event])
+    case _ => throw new IllegalStateException("Trying to compare a non-Event of IndexedNode with an Event")
+  }
+  def getEventStrings() = eventStrings
+  def getProportion(): Double = proportionOfReads
   /**
    * make a fancy string from this event for debug printing
    * @return a string representation
@@ -30,15 +44,15 @@ case class Event(name: String, sample: String, numberOfReads: Int, eventStrings:
    * @param annotationOutput where to write the string to (to keep it easy)
    * @return the string representation
    */
-  def newickString(distance: Double, annotationOutput: PrintWriter): String = {
-    val leftStr =  if (left.isDefined)  left.get.newickString(branchLeft, annotationOutput)   else ""
-    val rightStr = if (right.isDefined) right.get.newickString(branchRight, annotationOutput) else ""
+  def newickString(distance: Double, fullDistance: Double, annotationOutput: PrintWriter): String = {
+    val leftStr =  if (left.isDefined)  left.get.newickString(branchLeft, distance+branchLeft, annotationOutput)   else ""
+    val rightStr = if (right.isDefined) right.get.newickString(branchRight, distance+branchRight,annotationOutput) else ""
 
     var newDist = if (distance.isNaN) 1.0 else distance
-    val ret = name + numberOfReads + ":" + newDist
+    val ret = id + ":" + newDist
 
     var newSample = if (sample startsWith "M") "_" else sample
-    annotationOutput.write(name + numberOfReads + "\t" + name + "\t" + newSample + "\t" + numberOfReads + "\t" + eventStrings.mkString("-") + "\n")
+    annotationOutput.write(id + "\t" + name + "\t" + newSample + "\t" + fullDistance + "\t" + numberOfReads + "\t" + eventStrings.mkString("-") + "\n")
 
     //println(ret + "(" + leftStr + "," + rightStr + ")")
     val rnd = new Random()
@@ -80,18 +94,22 @@ object Event {
    * @param mergeID the id to assign the return 'merged' node
    * @return a merged event
    */
-  def merge(event1: Event, event2: Event, branchL: Double, branchR: Double, mergeID: Int): Event = {
+  def merge(event1: Event, event2: Event, branchL: Double, branchR: Double, mergeID: Int, constrained: Boolean): Event = {
     if (event1.id == event2.id) {
       throw new IllegalStateException("Don't ask to merge two events with the same ID: " + event1.id)
     }
 
     val newEvtStr = event1.eventStrings.zip(event2.eventStrings).map{case(evt1,evt2) => {
       if (evt1 != "NONE" && evt2 != "NONE" && evt2 != evt1) {
-        println()
-        println(Event.compatible(event1,event2))
-        println(event1.eventStrings.mkString("\t"))
-        println(event2.eventStrings.mkString("\t"))
-        throw new IllegalStateException("UNABLE TO MERGE " + event1.toFancyString + " and " + event2.toFancyString)
+        if (constrained) {
+          println()
+          println(Event.compatible(event1, event2))
+          println(event1.eventStrings.mkString("\t"))
+          println(event2.eventStrings.mkString("\t"))
+          throw new IllegalStateException("UNABLE TO MERGE " + event1.toFancyString + " and " + event2.toFancyString)
+        } else {
+          "NONE"
+        }
       }
 
       if ((evt1 == "NONE" && evt2 != "NONE") || (evt2 == "NONE" && evt1 != "NONE") ) {
@@ -107,6 +125,7 @@ object Event {
     val ret = Event("MERGED" + mergeID,
       "M_L" + event1.sample + "_" + event2.sample + "J",
       event1.numberOfReads + event2.numberOfReads,
+      event1.proportionOfReads + event2.proportionOfReads,
       newEvtStr,
       true)
 
