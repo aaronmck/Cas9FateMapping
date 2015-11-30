@@ -71,6 +71,12 @@ case class SequencingRead(name: String, bases: String, quals: String, readOrient
       math.max(bases.length,read2.bases.length).toDouble
 
   /**
+   *
+   * @return the average quality score value
+   */
+  def averageQual(): Double = intQuals.sum.toDouble / intQuals.length.toDouble
+
+  /**
    * does the read contain the name primer?
    * @param primer the primer sequence (please make sure the reverse complement is done for reverse reads)
    * @param window the window of bases added to the primer length when searching the beginning of the read
@@ -307,7 +313,10 @@ object SequencingRead {
 
     SequencingRead(sequencingRead.name,bases,quals,sequencingRead.readOrientation,sequencingRead.umi)
   }
+}
 
+object SequencingReadQualOrder extends Ordering[SequencingRead] {
+  def compare(a:SequencingRead, b:SequencingRead) = a.averageQual() compare b.averageQual()
 }
 
 /**

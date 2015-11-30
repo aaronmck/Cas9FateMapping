@@ -234,7 +234,7 @@ class MAFFTTest extends FlatSpec with Matchers {
     val fRead = MAFFT2.SequencingReadFromNameBases("fwd",readFwd)
     val rRead = MAFFT2.SequencingReadFromNameBases("rev",readRev)
 
-    val cutsSiteObj = CutSites.fromFile(new File("/net/shendure/vol10/projects/CRISPR.lineage/nobackup/2015_10_22_Cell_Culture_Lineage/data/HEK4_t1_20.fa.cutSites"), 3)
+    val cutsSiteObj = CutSites.fromFile(new File("test_files/TYRFull.fasta.cutSites"), 3)
 
     MAFFT2.alignTo(Array[SequencingRead](fRead),Some(ref), false,true)
     MAFFT2.alignTo(Array[SequencingRead](rRead),Some(ref), true ,true)

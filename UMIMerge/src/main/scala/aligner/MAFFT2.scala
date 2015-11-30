@@ -63,8 +63,8 @@ object MAFFT2 {
     var refToEvent = List[Alignment]()
 
     reference.zip(read).foreach{ case(refBase: Char,readBase: Char) =>
-      if (debugInfo)
-        print("BASES: " + refBase + "," + readBase + " ")
+      //if (debugInfo)
+      //  println("BASES: " + refBase + "," + readBase + " ")
       (refBase,readBase) match {
         case('-',readB) if !inRef => {/* we might be in the situation where we haven't started the real alignment, take the offset */}
         case('-',readB) if  inRef => { // insertion
@@ -138,15 +138,15 @@ object MAFFT2 {
    * @return the rate of matching for cigar "M" bases for both reads and the array of events over cutsites
    */
   def cutSiteEvents(reference: String, fwdRead: SequencingRead, revRead: SequencingRead, cutSites: CutSites, minMatchOnEnd: Int, debug: Boolean = false): Tuple3[Double,Double,Array[String]] = {
-    val alignmentsF = MAFFT2.alignTo(Array[SequencingRead](fwdRead),Some(reference),false, debug)
-    val alignmentsR = MAFFT2.alignTo(Array[SequencingRead](revRead),Some(reference),true,  debug)
+    val alignmentsF = MAFFT2.alignTo(Array[SequencingRead](fwdRead),Some(reference), false, debug)
+    val alignmentsR = MAFFT2.alignTo(Array[SequencingRead](revRead),Some(reference), true,  debug)
 
-    val events1 = MAFFT2.callEdits(alignmentsF(0).bases, alignmentsF(1).bases, minMatchOnEnd, debug)
-    val events2 = MAFFT2.callEdits(alignmentsR(0).bases, alignmentsR(1).bases, minMatchOnEnd, debug)
+    val events1 = MAFFT2.callEdits(alignmentsF(0).bases, alignmentsF(1).bases, minMatchOnEnd, false)
+    val events2 = MAFFT2.callEdits(alignmentsR(0).bases, alignmentsR(1).bases, minMatchOnEnd, false)
 
     if (debug) {
-      println("Events1 : " + events1.mkString(","))
-      println("Events2 : " + events2.mkString(","))
+      println("Events1 : \n" + events1.mkString("\n"))
+      println("Events2 : \n" + events2.mkString(","))
     }
 
     val matchRate1 = percentMatch(alignmentsF(0).bases,alignmentsF(1).bases)
@@ -181,6 +181,8 @@ object MAFFT2 {
    */
   def combineTwoReadEdits(edits1: List[Alignment],edits2: List[Alignment], cutSites: CutSites, debug: Boolean = false): Array[String] = {
     var ret = Array[String]()
+    var retCovered = Array[Boolean]()
+
     cutSites.windows.foreach{case(start,cut,end) => {
       var candidates = Array[Alignment]()
 

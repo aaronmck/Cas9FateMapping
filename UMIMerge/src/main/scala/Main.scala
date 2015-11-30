@@ -1,5 +1,7 @@
 package main.scala
 
+import java.util
+
 import _root_.utils.{CutSites}
 import utils.Utils
 
@@ -109,9 +111,8 @@ object Main extends App {
         throw new IllegalStateException("You should only provide a primer file with two primers")
 
       // our containers for forward and reverse reads
-      val umiReadsFWD =     new HashMap[String, ArrayBuffer[SequencingRead]]()
-      val umiReadsRVS =     new HashMap[String, ArrayBuffer[SequencingRead]]()
-
+      var umiReadsFWD =     new HashMap[String, ArrayBuffer[SequencingRead]]()
+      var umiReadsRVS =     new HashMap[String, ArrayBuffer[SequencingRead]]()
 
       // --------------------------------------------------------------------------------
       // process the reads into bins of UMIs, keep fwd/rev reads together
@@ -125,18 +126,24 @@ object Main extends App {
         val readNoUMI =        fGroup(1).slice(config.umiLength, fGroup(1).length)
         val qualNoUMI =        fGroup(3).slice(config.umiLength, fGroup(3).length)
 
-        val readBuilderF =     umiReadsFWD.getOrElse(umi, new ArrayBuffer[SequencingRead]())
-        val readBuilderR =     umiReadsRVS.getOrElse(umi, new ArrayBuffer[SequencingRead]())
+        val containsForward =  readNoUMI.slice(0,25) contains (primers(0))
+        val containsReverse =  rGroup(1).slice(0,25) contains (Utils.reverseComplement(primers(1)))
 
-        readBuilderF +=        SequencingRead(fGroup(0),readNoUMI, qualNoUMI, ForwardReadOrientation, umi).qualityThresholdRead(3,30)
-        umiReadsFWD(umi) =     readBuilderF
+        if (containsForward && containsReverse) {
+          val readBuilderF = umiReadsFWD.getOrElse(umi, new ArrayBuffer[SequencingRead]())
+          val readBuilderR = umiReadsRVS.getOrElse(umi, new ArrayBuffer[SequencingRead]())
 
-        readBuilderR +=        SequencingRead(rGroup(0), rGroup(1), rGroup(3), ReverseReadOrientation, umi).qualityThresholdRead(3,30)
-        umiReadsRVS(umi) =     readBuilderR
+          readBuilderF += SequencingRead(fGroup(0), readNoUMI, qualNoUMI, ForwardReadOrientation, umi).qualityThresholdRead(3, 15)
+          umiReadsFWD(umi) = readBuilderF
+
+          readBuilderR += SequencingRead(rGroup(0), rGroup(1), rGroup(3), ReverseReadOrientation, umi).qualityThresholdRead(3, 15)
+          umiReadsRVS(umi) = readBuilderR
+        }
 
         readsProcessed += 1
         if (readsProcessed % 10000 == 0)
           print(".")
+
       }
       }
 
@@ -144,45 +151,27 @@ object Main extends App {
       // filter out UMIs that are really really abnormal in terms of size -- this will save
       // us a huge amount of computation later
       // --------------------------------------------------------------------------------
-      val readCountsPerUmiFWD = ArrayBuilder.make[Double]()
-      val readCountsPerUmiREV = ArrayBuilder.make[Double]()
+      val umiReadsFWDReplacements =     new HashMap[String, Array[SequencingRead]]()
+      val umiReadsRVSReplacements =     new HashMap[String, Array[SequencingRead]]()
+      val downsampleSize = 50
+      val minReads = 10
 
-      umiReadsFWD.foreach{case(umi,reads) => readCountsPerUmiFWD += reads.toArray.size}
-      umiReadsRVS.foreach{case(umi,reads) => readCountsPerUmiREV += reads.toArray.size}
+      umiReadsFWD foreach { case(umi,fReadsBuilder) => {
+        val fReads = fReadsBuilder.toArray
+        val rReads = umiReadsRVS(umi).toArray
 
-      val fwdCounts = readCountsPerUmiFWD.result()
-      val revCounts = readCountsPerUmiREV.result()
-
-      val fwdMean = fwdCounts.map{vl => vl.toDouble / fwdCounts.length.toDouble}.sum
-      val revMean = revCounts.map{vl => vl.toDouble / fwdCounts.length.toDouble}.sum
-
-      val fwdDevs = fwdCounts.map(score => (score - fwdMean) * (score - fwdMean))
-      val revDevs = revCounts.map(score => (score - revMean) * (score - revMean))
-
-      val stddevF = Math.sqrt(fwdDevs.sum / fwdCounts.size)
-      val stddevR = Math.sqrt(revDevs.sum / revCounts.size)
-
-      val stdDevLimit = 5.0
-
-      val umisToRemove = new HashMap[String,Boolean]()
-      umiReadsFWD.foreach{case(umi,reads) => {
-        val sz = reads.toArray.size
-        if (sz > (fwdMean + (stdDevLimit*stddevF)) || sz < (fwdMean - (2*stddevF)))
-          umisToRemove(umi) = true
-      }}
-      umiReadsRVS.foreach{case(umi,reads) => {
-        val sz = reads.toArray.size
-        if (sz > (revMean + (stdDevLimit*stddevR)) || sz < (revMean - (2*stddevR)))
-          umisToRemove(umi) = true
-      }}
-
-      println("Forward mean and std = (" + fwdMean + "," + stddevF + ")")
-      println("Forward mean and std = (" + revMean + "," + stddevR + ")")
-
-      umisToRemove.foreach{case(umi,status) => {
-        println("removing UMI " + umi + " with forward size " + umiReadsFWD(umi).toArray.size + " and reverse size " + umiReadsRVS(umi).toArray.size)
-        umiReadsFWD.remove(umi)
-        umiReadsRVS.remove(umi)
+        if (fReads.size > downsampleSize) {
+          umiReadsFWDReplacements(umi) = Downsampler.downsample(fReads, downsampleSize)
+          println("downsampled forward UMI " + umi + " from " + fReads.size + " to " + umiReadsFWDReplacements(umi).size)
+        } else if (fReads.size > minReads) {
+          umiReadsFWDReplacements(umi) = fReads
+        }
+        if (rReads.size > downsampleSize) {
+          umiReadsRVSReplacements(umi) = Downsampler.downsample(rReads, downsampleSize)
+          println("downsampled reverse UMI " + umi + " from " + fReads.size + " to " + umiReadsFWDReplacements(umi).size)
+        } else if (rReads.size > minReads) {
+          umiReadsRVSReplacements(umi) = rReads
+        }
       }}
 
       //outputStats.write("UMI\tused\tffail.reason\tfwd.reads\tprimered.fwd.reads\tfiltered.fwd.reads\trev.reads\tprimered.rev.reads\tfiltered.rev.reads\t")
@@ -192,7 +181,7 @@ object Main extends App {
       var passingUMI = 0
       var totalWithUMI = 0
 
-      println("\nProcessing " + umiReadsFWD.size + " forward read UMIs and " + umiReadsRVS.size + " reverse read UMIs")
+      println("\nProcessing " + umiReadsFWDReplacements.size + " forward read UMIs and " + umiReadsRVSReplacements.size + " reverse read UMIs")
       var index = 0
 
       val cutsSiteObj = CutSites.fromFile(config.cutSites, 3)
@@ -200,10 +189,12 @@ object Main extends App {
       // --------------------------------------------------------------------------------
       // for each UMI -- process its individual reads
       // --------------------------------------------------------------------------------
-      umiReadsFWD.foreach { case (umi, reads) => {
-        val reverseReads = umiReadsRVS(umi).toArray
-        val forwardReads = reads.toArray
+      umiReadsFWDReplacements.foreach { case (umi, reads) => {
+        //println(umi)
+        val reverseReads = umiReadsRVSReplacements(umi)
+        val forwardReads = umiReadsFWDReplacements(umi)
 
+        println(reverseReads.size + "," + forwardReads.size)
         if (forwardReads.length > config.minimumUMIReads && reverseReads.length > config.minimumUMIReads) {
           val res = OutputManager.mergeTogether(umi,
             forwardReads,
@@ -222,7 +213,7 @@ object Main extends App {
           passingUMI += res
         }
         index += 1
-        if (index % 100 == 0) {
+        if (index % 10 == 0) {
           println("INFO: Processed " + index + " umis so far")
         }
       }
@@ -237,4 +228,6 @@ object Main extends App {
   } getOrElse {
     println("Unable to parse the command line arguments you passed in, please check that your parameters are correct")
   }
+
+
 }
