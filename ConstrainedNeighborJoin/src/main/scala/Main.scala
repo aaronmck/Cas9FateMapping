@@ -36,9 +36,7 @@ import java.util.zip._
 case class Config(meltedUMIFile: File = new File(Main.NOTAREALFILENAME),
                   newickFile: File = new File(Main.NOTAREALFILENAME),
                   mergeInformation: File = new File(Main.NOTAREALFILENAME),
-                  targetSiteCount: Int = 10,
-                  dropHeaderLines: Int = 1)
-
+                  distanceMatrixFile: File = new File(Main.NOTAREALFILENAME))
 
 object Main extends App {
   val NOTAREALFILENAME = "/0192348102jr10234712930h8j19p0hjf129-348h512935"
@@ -50,11 +48,10 @@ object Main extends App {
     head("UMIMerge", "1.0")
 
     // *********************************** Inputs *******************************************************
-    opt[File]("meltedUMIFile") required() valueName ("<file>") action { (x, c) => c.copy(meltedUMIFile = x) } text ("the UMI summary file")
-    opt[File]("newickFile") required() valueName ("<file>") action { (x, c) => c.copy(newickFile = x) } text ("our output Newick file")
-    opt[File]("mergeInformation") required() valueName ("<file>") action { (x, c) => c.copy(mergeInformation = x) } text ("some information about our merged events")
-    opt[Int]("targetSiteCount") required() action { (x, c) => c.copy(targetSiteCount = x) } text ("the number of target sites we have")
-    opt[Int]("dropHeaderLines") required() action { (x, c) => c.copy(dropHeaderLines = x) } text ("the number of header lines to drop")
+    opt[File]("meltedUMIFile") required() valueName ("<file>") action { (x, c) => c.copy(meltedUMIFile = x) } text ("(input) the UMI summary file")
+    opt[File]("newickFile") required() valueName ("<file>") action { (x, c) => c.copy(newickFile = x) } text ("(output) our output Newick file")
+    opt[File]("mergeInformation") required() valueName ("<file>") action { (x, c) => c.copy(mergeInformation = x) } text ("(output) annotations for the output tree (used in FigTree)")
+    opt[File]("distanceMatrixFile") required() valueName ("<file>") action { (x, c) => c.copy(distanceMatrixFile = x) } text ("(output) our distance matrix file")
 
       // some general command-line setup stuff
       note ("processes reads with UMIs into merged reads\n")
@@ -65,52 +62,29 @@ object Main extends App {
     config: Config => {
       val outputAnnotations = args(2)
       val countsOutput = args(3)
-
-      // read in the series of events
-      var events = Array[Event]()
-      var uniqueEvents = new HashMap[String, String]()
-      var allEvents = Array[Event]()
-      val targetSiteCount = 10
-
+      val useConstraints = false
 
       // ------------------------------------------------------------------------------------------------------------------------
       // parse out the event strings into events
       // ------------------------------------------------------------------------------------------------------------------------
       println("reading in event file...")
-      Source.fromFile(config.meltedUMIFile).getLines().drop(config.dropHeaderLines).foreach { line => {
-        val eventStrings = line.split("\t").slice(line.split("\t").size - (targetSiteCount * 2), line.split("\t").size - targetSiteCount)
-        val sp = line.split("\t")
-        val eventAsString = eventStrings.mkString("_")
-        val evt = Event(sp(1), sp(0), sp(4).toInt, eventStrings)
-        allEvents :+= evt
-        if (!(uniqueEvents contains eventAsString)) {
-          val isAllNone = eventStrings.map { evt => if (evt == "NONE") 0 else 1 }.sum
-          if (isAllNone > 0) {
-            events :+= evt
-          }
-        }
-        uniqueEvents(eventAsString) = "Sample_" + line.split("\t")(0)
-      }
-      }
+      val statsFile = StatsFile(config.meltedUMIFile)
 
       // ------------------------------------------------------------------------------------------------------------------------
       // events to counts -- count the total events over all positions
       // ------------------------------------------------------------------------------------------------------------------------
-      val eventToCount = new HashMap[String, Int]()
-      allEvents.foreach { evt1 => evt1.eventStrings.foreach { evtString => {
-        eventToCount(evtString) = eventToCount.getOrElse(evtString, 0) + 1
-      }}}
-
+      val eventCounter = new NormalizedEventCounter(statsFile,200000.0 /* 200K */)
       // ------------------------------------------------------------------------------------------------------------------------
       // setup a distance matrix
       // ------------------------------------------------------------------------------------------------------------------------
-      val distances = new DistanceMatrix(events, SumLogDistance(eventToCount, 1, 2))
+      val distances = new DistanceMatrix(statsFile.allEvents, SumLogDistance(eventCounter, 1, 2))
+      distances.toDistanceFile(config.distanceMatrixFile)
 
       // ------------------------------------------------------------------------------------------------------------------------
       // find the minimum set of events
       // ------------------------------------------------------------------------------------------------------------------------
       println("Performing merges (dot per merge)")
-      val minSet = distances.minimizeSet()
+      val minSet = distances.minimizeSet(useConstraints)
 
       // ------------------------------------------------------------------------------------------------------------------------
       // output the remaining nodes as tree
@@ -118,10 +92,10 @@ object Main extends App {
       val newickFileOutput = new PrintWriter(config.newickFile)
       val nodeStats = new PrintWriter(config.mergeInformation)
 
-      nodeStats.write("taxa\tname\tsample\tnumberOfReads\tevents\n")
+      nodeStats.write("taxa\tname\tsample\tdepth\tnumberOfReads\tevents\n")
 
       minSet.foreach{node => {
-        newickFileOutput.write("(" + node.newickString(1.0, nodeStats) + ");\n")
+        newickFileOutput.write("(" + node.newickString(1.0, 0.0, nodeStats) + ")root:1.0;\n")
       }}
 
       newickFileOutput.close()

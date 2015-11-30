@@ -1,12 +1,10 @@
-name := "TreeSimluator"
+name := "ConstrainedNJ"
 
 version := "1.0"
 
 scalaVersion := "2.11.7"
 
 resolvers += Resolver.sonatypeRepo("public")
-
-resolvers += "erichseifert.de" at "http://mvn.erichseifert.de/maven2"
 
 unmanagedBase <<= baseDirectory { base => base / "project" }
 
