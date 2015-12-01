@@ -94,7 +94,7 @@ class DNAQC extends QScript {
   var samtoolsPath: File = "/net/gs/vol1/home/aaronmck/tools/samtools/samtools-0.1.19/samtools"
 
   @Input(doc = "The path to the binary of bwa", fullName = "bwa", shortName = "bwa", required = false)
-  var bwaPath: File = "/net/gs/vol1/home/aaronmck/tools/bwa/bwa-0.7.9a/bwa"
+  var bwaPath: File = "/net/gs/vol3/software/modules-sw/bwa/0.7.3/Linux/RHEL6/x86_64/bin/bwa"
 
   @Input(doc = "The path to the barcode splitter", fullName = "maulpath", shortName = "mlp", required = false)
   var maulPath: File = "/net/gs/vol1/home/aaronmck/source/Maul/target/scala-2.10/Maul-assembly-1.0.jar"
@@ -194,6 +194,8 @@ class DNAQC extends QScript {
 
       var mergedReads = new File(sampleOutput + File.separator + sampleTag + ".merged.fq.gz")
       var mergedReadUnzipped = new File(sampleOutput + File.separator + sampleTag + ".merged.fq")
+      var fwdUnzipped = new File(sampleOutput + File.separator + sampleTag + ".fwd.fq")
+      var revUnzipped = new File(sampleOutput + File.separator + sampleTag + ".rev.fq")
       val readsUnzipped1 = new File(sampleOutput + File.separator + sampleTag + ".read1.fq")
       val readsUnzipped2 = new File(sampleOutput + File.separator + sampleTag + ".read2.fq")
 
@@ -213,37 +215,62 @@ class DNAQC extends QScript {
       val barcodeStats = new File(sampleOutput + File.separator + sampleTag + ".barcodeStats")
       val overlapFile = new File(sampleOutput + File.separator + sampleTag + ".readOverlap")
 
-      add(Maul(inputFiles, barcodeFiles, List[String](sampleObj.barcode1,sampleObj.barcode2), processedFastqs, barcodeStats, barcodeConfusion,overlapFile))
-      inputFiles = List[File](barcodeSplit1,barcodeSplit2)
+      if (sampleObj.barcode1 != "all" && sampleObj.barcode2 != "all") {
+        add(Maul(inputFiles, barcodeFiles, List[String](sampleObj.barcode1,sampleObj.barcode2), processedFastqs, barcodeStats, barcodeConfusion,overlapFile))
+        inputFiles = List[File](barcodeSplit1,barcodeSplit2)
+      }
+
+
+              val postProcessedFastq1 = new File(sampleOutput + File.separator + sampleTag + ".cleaned.trim.fastq1.fq.gz")
+              val postProcessedFastq2 = new File(sampleOutput + File.separator + sampleTag + ".cleaned.trim.fastq2.fq.gz")
+              val cleanedFastqs = List[File](postProcessedFastq1,postProcessedFastq2)
 
       // run an Fastqc so we know what we started with
       // ************************************************************************************
       add(Fastqc(inputFiles, initialFastQCDir))
 
-      val postProcessedFastq1 = new File(sampleOutput + File.separator + sampleTag + ".cleaned.trim.fastq1.fq.gz")
-      val postProcessedFastq2 = new File(sampleOutput + File.separator + sampleTag + ".cleaned.trim.fastq2.fq.gz")
-      val cleanedFastqs = List[File](postProcessedFastq1,postProcessedFastq2)
+      val toAlignFastq1 = new File(sampleOutput + File.separator + sampleTag + ".fwd.fastq")
+      val toAlignFastq2 = new File(sampleOutput + File.separator + sampleTag + ".rev.fastq")
+      val toAlignStats = new File(sampleOutput + File.separator + sampleTag + ".stats")
 
-      // SeqPrep to merge reads
-      add(SeqPrep(processedFastqs, cleanedFastqs, mergedReads))
 
+      if (sampleObj.UMIed) {
+        // collapse the reads by their UMI and output FASTA files with the remaining quality reads
+        add(UMIProcessingPaired(inputFiles(0),
+          inputFiles(1),
+          toAlignFastq1,
+          toAlignFastq2,
+          toAlignStats,
+          10,
+          new File(sampleObj.reference + ".primers"),
+          new File(sampleObj.reference),
+          sampleObj.sample,
+          new File(sampleObj.reference + ".cutSites")))
+
+
+
+        // SeqPrep to merge reads
+        //add(SeqPrep(List[File](toAlignFastq1,toAlignFastq2), cleanedFastqs, mergedReads))
+        add(Fastqc(cleanedFastqs, initialFastQMerged))
+        add(Fastqc(List[File](mergedReads), initialFastQMerged))
+      } else {
+
+        add(SeqPrep(inputFiles, cleanedFastqs, mergedReads))
+        add(Fastqc(List[File](mergedReads), initialFastQMerged))
+        add(Gunzip(mergedReads, mergedReadUnzipped))
+        add(NeedlemanAll(sampleObj.reference, mergedReadUnzipped, sam))
+      }
       // unzip and process the UMI data into a single call fasta file
-      add(Gunzip(cleanedFastqs(0), readsUnzipped1))
-      add(Gunzip(cleanedFastqs(1), readsUnzipped2))
-      add(Gunzip(mergedReads, mergedReadUnzipped))
+      //add(Gunzip(mergedReads, mergedReadUnzipped))
+      //add(Gunzip(postProcessedFastq1, fwdUnzipped))
+      //add(Gunzip(postProcessedFastq2, revUnzipped))
 
-      val toAlignFasta = new File(sampleOutput + File.separator + sampleTag + ".merged.fasta")
-      val toAlignFasta1 = new File(sampleOutput + File.separator + sampleTag + ".fwd.fasta")
-      val toAlignFasta2 = new File(sampleOutput + File.separator + sampleTag + ".rev.fasta")
-      val toAlignStatsUnpaired = new File(sampleOutput + File.separator + sampleTag + ".unpaired.stats")
-      val toAlignStatsPaired = new File(sampleOutput + File.separator + sampleTag + ".stats")
-
-      add(UMIProcessingPaired(readsUnzipped1,readsUnzipped2,toAlignFasta1,toAlignFasta2,toAlignStatsUnpaired,10,new File(sampleObj.reference + ".primers"),new File(sampleObj.reference),sampleObj.sample))
-      add(UMIProcessing(mergedReadUnzipped, toAlignFasta, toAlignStatsPaired, 10, new File(sampleObj.reference + ".primers"), new File(sampleObj.reference), sampleObj.sample))
-
-      val outputSam = new File(sampleOutput + File.separator + sampleTag + ".sam")
-      //add(NeedlemanAll(sampleObj.reference, toAlignFasta, outputSam))
-
+      //val outputSam = new File(sampleOutput + File.separator + sampleTag + ".sam")
+      //val outputSamF = new File(sampleOutput + File.separator + sampleTag + ".fwd.sam")
+      //val outputSamR = new File(sampleOutput + File.separator + sampleTag + ".rev.sam")
+      //add(NeedlemanAll(sampleObj.reference, mergedReadUnzipped, outputSam))
+      //add(SmithWaterman(sampleObj.reference, List[File](postProcessedFastq1), outputSamF))
+      //add(SmithWaterman(sampleObj.reference, List[File](postProcessedFastq2), outputSamR))
     })
   }
 
@@ -276,7 +303,7 @@ class DNAQC extends QScript {
   // The storage container for the data we've read from the input tear sheet
   case class SourceEntry(
     val sample: String,
-    val caseControl: String,
+    val UMIed: Boolean,
     val reference: File,
     val outputDir: File,
     val fastq1: File,
@@ -304,7 +331,7 @@ class DNAQC extends QScript {
     val inputLines = Source.fromFile(input).getLines
 
     // check that the header contains the correct information
-    if (inputLines.next().stripLineEnd != "sample\tcontrol\treference\toutput.dir\tfastq1\tfastq2\tbarcode.fastq1\tbarcode.fastq2\tbarcode1\tbarcode2")
+    if (inputLines.next().stripLineEnd != "sample\tumi\treference\toutput.dir\tfastq1\tfastq2\tbarcode.fastq1\tbarcode.fastq2\tbarcode1\tbarcode2")
       throw new IllegalArgumentException("Your header doesn't seem like a correctly formatted  tear sheet!")
 
     return inputLines.map(line => {
@@ -312,7 +339,7 @@ class DNAQC extends QScript {
       try {
         (new SourceEntry(
           tokens(0), // sample
-          tokens(1), // case control status: true if control, else a name of a sample for the control
+          tokens(1).toBoolean, // case control status: true if control, else a name of a sample for the control
           new File(tokens(2)), // reference
           new File(tokens(3)), // output
           new File(tokens(4)), // fastq1
@@ -825,22 +852,40 @@ class DNAQC extends QScript {
    * val reference = args(5)
    */
   // ********************************************************************************************************
-  case class UMIProcessingPaired(inMergedReads1: File, inMergedReads2: File, outputFASTA1: File, outputFASTA2: File, outputStats: File, umiCutOff: Int, primersFile: File, reference: File, sampleName: String) extends CommandLineFunction with ExternalCommonArgs {
-    @Input(doc = "input reads") var inReads1 = inMergedReads1
-    @Input(doc = "input reads") var inReads2 = inMergedReads2
-    @Output(doc = "output fasta for further alignment") var outFASTA1 = outputFASTA1
-    @Output(doc = "output fasta for further alignment") var outFASTA2 = outputFASTA2
+  case class UMIProcessingPaired(inMergedReads1: File, inMergedReads2: File, outputFASTA1: File,
+    outputFASTA2: File, outputStats: File, umiCutOff: Int, primersFile: File, reference: File, sampleName: String, cutSites: File) extends CommandLineFunction with ExternalCommonArgs {
+
+    @Input(doc = "input reads (fwd)") var inReads1 = inMergedReads1
+    @Input(doc = "input reads (rev)") var inReads2 = inMergedReads2
+    @Input(doc = "the cutsite locations") var cutSiteFile = cutSites
+    @Output(doc = "output fasta for further alignment (fwd)") var outFASTA1 = outputFASTA1
+    @Output(doc = "output fasta for further alignment (rev)") var outFASTA2 = outputFASTA2
     @Output(doc = "output statistics file for containing information about the UMI merging process") var outStat = outputStats
     @Argument(doc = "how many UMIs do we need to initial have to consider merging them") var umiCut = umiCutOff
     @Argument(doc = "the primers file; one line per primer that we expect to have on each end of the resulting merged read") var primers = primersFile
     @Argument(doc = "the reference file") var ref = reference
     @Argument(doc = "the sample name") var sample = sampleName
 
-    var cmd = "scala -J-Xmx7g " + umiScriptPE + " " + inReads1 + " " + inReads2 + " " + outFASTA1 + " " + outFASTA2 + " " + outStat + " " + umiCut + " " + primers + " " + ref + " " + sample
+    //java -jar  /net/shendure/vol10/projects/CRISPR.lineage/nobackup/codebase/UMIMerge/target/scala-2.11/UMIMerge-assembly-1.0.jar
+    // --inputFileReads1 /net/shendure/vol10/projects/CRISPR.lineage/nobackup/2015_10_18_Full_TYR_sequencing/data/pipeline_output/TYR_gils/TYR_gils.barcodeSplit.fastq1.fq.gz
+    // --inputFileReads2 /net/shendure/vol10/projects/CRISPR.lineage/nobackup/2015_10_18_Full_TYR_sequencing/data/pipeline_output/TYR_gils/TYR_gils.barcodeSplit.fastq2.fq.gz
+    //--outputFastq1 TYR_gils.fwd.fq
+    //--outputFastq2 TYR_gils.rev.fq
+    //--cutSites /net/shendure/vol10/projects/CRISPR.lineage/nobackup/2015_10_18_Full_TYR_sequencing/data/TYRFull.fasta.cutSites
+    //--primersEachEnd /net/shendure/vol10/projects/CRISPR.lineage/nobackup/2015_10_18_Full_TYR_sequencing/data/TYRFull.fasta.primers
+    //--reference /net/shendure/vol10/projects/CRISPR.lineage/nobackup/2015_10_18_Full_TYR_sequencing/data/TYRFull.fasta
+    //--umiStart 0
+    //--umiLength 10
+    //--samplename TYR_gils
+    var cmdString = "scala -J-Xmx13g /net/shendure/vol10/projects/CRISPR.lineage/nobackup/codebase/UMIMerge/target/scala-2.11/UMIMerge-assembly-1.0.jar "
+    cmdString += " --inputFileReads1 " + inReads1 + " --inputFileReads2 " + inReads2 + " --outputFastq1 " + outFASTA1 + " --outputFastq2 " + outFASTA2 + " --outputStats "
+    cmdString += outStat + " --umiLength " + umiCut + " --primersEachEnd " + primers + " --reference " + ref + " --samplename " + sample + " --umiStart 0 --cutSites " + cutSiteFile
 
-    this.memoryLimit = 8
-    this.residentRequest = 8
-    this.residentLimit = 8
+    var cmd = cmdString
+
+    this.memoryLimit = 16
+    this.residentRequest = 16
+    this.residentLimit = 16
 
     def commandLine = cmd
     this.isIntermediate = false
@@ -901,7 +946,7 @@ class DNAQC extends QScript {
     this.residentLimit = 4
 
     // o -> minimum overlap, n -> faction of bases that must match in overlap
-    var cmd = seqPrepPath + " -f " + fqs(0) + " -r " + fqs(1) + " -1 " + fqOuts(0) + " -2 " + fqOuts(1) + " -s " + merged
+    var cmd = seqPrepPath + " -o 90 -f " + fqs(0) + " -r " + fqs(1) + " -1 " + fqOuts(0) + " -2 " + fqOuts(1) + " -s " + merged
 
     def commandLine = cmd
     this.isIntermediate = false
