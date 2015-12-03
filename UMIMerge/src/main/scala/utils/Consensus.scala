@@ -1,6 +1,5 @@
 package main.scala
 
-import aligner.Clustalo
 import main.scala.utils.Utils
 
 import scala.collection.mutable._
@@ -18,7 +17,7 @@ object Consensus {
    * @param reads the reads to make a consensus over
    * @return a tuple, representing the concensus read and the per-base error rate over positions in that read
    */
-  def consensus(reads: Array[SequencingRead]): SequencingRead = {
+  def consensus(reads: Array[SequencingRead],name: String = "Consensus"): SequencingRead = {
     // each string should be the same length coming back from CLUSTAL
     var highestOccuringBase = Array[Char]()
     var highestOccuringBaseProp = Array[Double]()
@@ -46,7 +45,7 @@ object Consensus {
     }
     }
 
-    SequencingRead("Consensus",
+    SequencingRead(name,
       highestOccuringBase.mkString(""),
       "H" * highestOccuringBase.length, // highestOccuringBaseProp.map{pr => Utils.probabilityOfErrorToPhredChar(1.0 - pr)}.mkString(""),
       if (reads.size == 0) ForwardReadOrientation else reads(0).readOrientation,

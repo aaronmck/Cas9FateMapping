@@ -1,6 +1,6 @@
 package test.scala
 
-import aligner.MAFFT2
+import aligner.AlignmentManager$
 import main.scala.Downsampler
 import utils.CutSites
 

@@ -3,9 +3,12 @@ package aligner
 
 import java.io._
 
+import _root_.aligner.MAFFT._
+import main.scala.utils.Utils
+
 import scala.collection.mutable._
 import scala.io._
-import scala.main.SequencingRead
+import scala.main.{ReadDirection, SequencingRead}
 import scala.sys.process._
 
 /**
@@ -16,72 +19,110 @@ import scala.sys.process._
 // process reads to and from the clustalo algorithm
 //
 // ------------------------------------------------------------------------------------------
-case class Waterman(reads: Array[SequencingRead]) extends Aligner {
+object Waterman extends Aligner {
+  val referenceName = "waterRef"
 
-  var currentReadName: Option[String] = None
-  var currentRead = ""
-  var readLength = 0
 
-  // map the input read name to the read, so we can reset the UMI, direction, etc
-  val mappedReads = new HashMap[String,SequencingRead]()
-  reads.foreach{rd => mappedReads(rd.name) = rd}
+  override def alignTo(reads: Array[SequencingRead], ref: Option[String], debug: Boolean): Array[SequencingRead] = {
+    alignTo(reads, ref, debug, 15.0, 0.05)
+  }
 
-  // our temp file we've written to
-  val tmpFile = run_water()
-  val postMergedReads = fetchReads(tmpFile)
+  def alignTo(reads: Array[SequencingRead], ref: Option[String], debug: Boolean, gapOpen: Double, gapExtend: Double): Array[SequencingRead] = {
+    if (reads.size != 1 && ref.isDefined)
+      throw new IllegalStateException("Unable to run waterman with " + reads.size + " reads with a reference")
+    if (reads.size != 2 && !ref.isDefined)
+      throw new IllegalStateException("Unable to run waterman with " + reads.size + " reads without a reference")
 
-  // map our input reads from their name
-  def fetchReads(alignedFile: File): Array[SequencingRead] = {
-    var returnReads = Array[SequencingRead]()
-    Source.fromFile(alignedFile).getLines().foreach { line => {
+    val tmp = java.io.File.createTempFile("UMIMergerBWA", ".fasta")
+    val tmp2 = java.io.File.createTempFile("UMIMergerBWA", ".fasta")
+    //println(tmp + " " + tmp2)
+    val tmpWriter = new PrintWriter(tmp)
+    val tmpWriter2 = new PrintWriter(tmp2)
+
+    if (ref.isDefined) {
+      tmpWriter.write(">" + referenceName + "\n" + ref.get + "\n")
+      tmpWriter.close()
+
+      if (reads(0).reverseCompAlign)
+        tmpWriter2.write(">" + reads(0).name + "\n" + Utils.reverseComplement(reads(0).bases.filter { bs => bs != '-' }.mkString("")) + "\n")
+      else
+        tmpWriter2.write(">" + reads(0).name + "\n" + reads(0).bases.filter { bs => bs != '-' }.mkString("") + "\n")
+      tmpWriter2.close()
+    } else {
+      //println(reads(0).reverseCompAlign)
+      //println(reads(1).reverseCompAlign)
+
+      if (reads(0).reverseCompAlign)
+        tmpWriter.write(">" + reads(0).name + "\n" + Utils.reverseComplement(reads(0).bases.filter { bs => bs != '-' }.mkString("")) + "\n")
+      else
+        tmpWriter.write(">" + reads(0).name + "\n" + reads(0).bases.filter { bs => bs != '-' }.mkString("") + "\n")
+      tmpWriter.close()
+
+
+      if (reads(1).reverseCompAlign)
+        tmpWriter2.write(">" + reads(1).name + "\n" + Utils.reverseComplement(reads(1).bases.filter { bs => bs != '-' }.mkString("")) + "\n")
+      else
+        tmpWriter2.write(">" + reads(1).name + "\n" + reads(1).bases.filter { bs => bs != '-' }.mkString("") + "\n")
+      tmpWriter2.close()
+
+    }
+    if (reads.size == 2) {
+      //println(reads(0).bases + " " + reads(0).reverseCompAlign)
+      //println(reads(1).bases + " " + reads(1).reverseCompAlign)
+    } else {
+      //println(reads(0).bases + " " + reads(0).reverseCompAlign)
+    }
+
+    /**
+     * Run MAFFT and capture the output
+     */
+    val out = new StringBuilder
+    val err = new StringBuilder
+    val logger = ProcessLogger(
+      (o: String) => out.append(o + "\n"),
+      (e: String) => err.append(e + "\n"))
+
+    val call = "needleall -datafile /net/shendure/vol10/projects/CRISPR.lineage/nobackup/reference_data/EDNAFULL " +
+      "-gapopen " + gapOpen + " -gapextend " + gapExtend + " -asequence " + tmp + " -bsequence " +
+      tmp2 + " -aformat3 fasta -auto -stdout"
+
+    (call) ! logger
+
+    var readNames = Array[String]()
+    var readStrings = Array[String]()
+    var currentRead = ""
+
+
+    out.toString().split("\n") foreach { line =>
+      //println(line)
       if (line startsWith ">") {
-        if (currentReadName.isDefined) {
-          if (!(mappedReads contains currentReadName.get))
-            throw new IllegalStateException("Unable to find the read we send out: " + currentReadName.get + " in our input reads")
-          val oldRead = mappedReads(currentReadName.get)
-          returnReads :+= SequencingRead(currentReadName.get, currentRead, {"H" * currentRead.length}.mkString(""), oldRead.readOrientation, oldRead.umi)
-
-          readLength = currentRead.length
-          currentRead = ""
-          currentReadName = Some(line.stripPrefix(">"))
-        } else {
-          currentReadName = Some(line.stripPrefix(">"))
-        }
+        if (currentRead != "")
+          readStrings :+= currentRead
+        currentRead = ""
+        readNames :+= line.stripPrefix(">")
       } else {
-        currentRead += line
-
+        currentRead += line.toUpperCase
       }
     }
+    if (currentRead != "")
+      readStrings :+= currentRead
+
+    // make an array of SequenceReads to store the result in
+    var ret = Array[SequencingRead]()
+
+    if (readStrings.size != 2)
+      return Array[SequencingRead]()
+
+    if (ref.isDefined) {
+      ret :+= Aligner.SequencingReadFromNameBases(referenceName, readStrings(0))
+      ret :+= Aligner.SequencingReadFromNameBases(readNames(1), readStrings(1))
+    } else {
+      ret :+= Aligner.SequencingReadFromNameBases(readNames(0), readStrings(0))
+      ret :+= Aligner.SequencingReadFromNameBases(readNames(1), readStrings(1))
     }
 
-    if (currentReadName.isDefined) {
-      if (!(mappedReads contains currentReadName.get))
-        throw new IllegalStateException("Unable to find the read we send out: " + currentReadName.get + " in our input reads")
-      val oldRead = mappedReads(currentReadName.get)
-      returnReads :+= SequencingRead(currentReadName.get, currentRead, {
-        "H" * currentRead.length
-      }.mkString(""), oldRead.readOrientation, oldRead.umi)
-    }
-    return(returnReads)
+    //tmp.delete()
+    //tmp2.delete()
+    return ret
   }
-
-  /**
-   * do the actual clustal run with our reads
-   * @return the file containing the alignment
-   */
-  def run_water(): File = {
-    // setup a CLUSTAL run and farm it out the machine
-    val tmp = java.io.File.createTempFile("UMIMerger", ".txt")
-    val tmpWriter = new PrintWriter(tmp)
-    reads.foreach { case (read) => tmpWriter.write("> " + read.name + "\n" + read.bases.filter{bs => bs != '-'}.mkString("") + "\n") }
-    tmpWriter.close()
-    val tmpOutput = java.io.File.createTempFile("UMIMerger", ".post.txt")
-    //println(tmpOutput)
-    //println("clustalo --dealign --force --pileup -i " + tmp + " -o " + tmpOutput)
-    val clustoResult = ("needleall -gapextend 0.1 -gapopen 5.0 -i " + tmp + " -o " + tmpOutput).!!
-    println("Water: Input " + tmp + " and output " + tmpOutput)
-    return tmpOutput
-  }
-
-
 }

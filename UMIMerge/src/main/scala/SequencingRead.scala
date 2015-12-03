@@ -11,6 +11,7 @@ case class SequencingRead(name: String, bases: String, quals: String, readOrient
 
   val intQuals = quals.map{qual => Utils.phredCharToQscore(qual)}.toArray
   def length = bases.length
+  var reverseCompAlign = false
 
   /**
    * find the last base in the string before a series of dashes

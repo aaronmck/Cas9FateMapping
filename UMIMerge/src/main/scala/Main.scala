@@ -133,10 +133,10 @@ object Main extends App {
           val readBuilderF = umiReadsFWD.getOrElse(umi, new ArrayBuffer[SequencingRead]())
           val readBuilderR = umiReadsRVS.getOrElse(umi, new ArrayBuffer[SequencingRead]())
 
-          readBuilderF += SequencingRead(fGroup(0), readNoUMI, qualNoUMI, ForwardReadOrientation, umi).qualityThresholdRead(3, 15)
+          readBuilderF += SequencingRead(fGroup(0), readNoUMI, qualNoUMI, ForwardReadOrientation, umi).qualityThresholdRead(3, 10)
           umiReadsFWD(umi) = readBuilderF
 
-          readBuilderR += SequencingRead(rGroup(0), rGroup(1), rGroup(3), ReverseReadOrientation, umi).qualityThresholdRead(3, 15)
+          readBuilderR += SequencingRead(rGroup(0), rGroup(1), rGroup(3), ReverseReadOrientation, umi).qualityThresholdRead(3, 10)
           umiReadsRVS(umi) = readBuilderR
         }
 
@@ -148,35 +148,54 @@ object Main extends App {
       }
 
       // --------------------------------------------------------------------------------
-      // filter out UMIs that are really really abnormal in terms of size -- this will save
-      // us a huge amount of computation later
+      // for each UMI combination, downsample to the best X reads, and use those during
+      // the merging process.  This helps us both in computational time as well as
+      // removing bad reads that will just mess with us later
       // --------------------------------------------------------------------------------
       val umiReadsFWDReplacements =     new HashMap[String, Array[SequencingRead]]()
       val umiReadsRVSReplacements =     new HashMap[String, Array[SequencingRead]]()
-      val downsampleSize = 50
+      val umiReadsFWDReplacementsCounts =     new HashMap[String, Int]()
+      val umiReadsRVSReplacementsCounts =     new HashMap[String, Int]()
+
+      val downsampleSize = 40
       val minReads = 10
+      var tooFewReadsUMI = 0
+      var downsampledUMI = 0
+      var justRightUMI = 0
 
       umiReadsFWD foreach { case(umi,fReadsBuilder) => {
         val fReads = fReadsBuilder.toArray
         val rReads = umiReadsRVS(umi).toArray
 
+        umiReadsFWDReplacementsCounts(umi) = fReads.size
+        umiReadsRVSReplacementsCounts(umi) = rReads.size
+
         if (fReads.size > downsampleSize) {
+          downsampledUMI += 1
           umiReadsFWDReplacements(umi) = Downsampler.downsample(fReads, downsampleSize)
-          println("downsampled forward UMI " + umi + " from " + fReads.size + " to " + umiReadsFWDReplacements(umi).size)
+          //println("downsampled forward UMI " + umi + " from " + fReads.size + " to " + umiReadsFWDReplacements(umi).size)
         } else if (fReads.size > minReads) {
           umiReadsFWDReplacements(umi) = fReads
+          justRightUMI += 1
+        } else {
+          tooFewReadsUMI += 1
         }
+
+
         if (rReads.size > downsampleSize) {
           umiReadsRVSReplacements(umi) = Downsampler.downsample(rReads, downsampleSize)
-          println("downsampled reverse UMI " + umi + " from " + fReads.size + " to " + umiReadsFWDReplacements(umi).size)
+          //println("downsampled reverse UMI " + umi + " from " + fReads.size + " to " + umiReadsFWDReplacements(umi).size)
         } else if (rReads.size > minReads) {
           umiReadsRVSReplacements(umi) = rReads
         }
       }}
+      println("Downsampled UMIs to a maximum of " + downsampleSize + " reads")
+      println("Downsampled UMIs:" + downsampledUMI)
+      println("To few reads UMIs:" + tooFewReadsUMI)
+      println("UMIs kept as is:" + justRightUMI)
 
-      //outputStats.write("UMI\tused\tffail.reason\tfwd.reads\tprimered.fwd.reads\tfiltered.fwd.reads\trev.reads\tprimered.rev.reads\tfiltered.rev.reads\t")
-      //outputStats.write("fwd.error.rate\tfwd.read\trev.error.rate\trev.read\n")
-      outputStatsFile.write("UMI\tkeptPCT\tfail.reason\tinitF\tfilteredF\tfinalF\tinitR\tfilteredR\tfinalR\treadF\treadR\tfwdBasesMatching\trevBasesMatching\t")
+
+      outputStatsFile.write("UMI\tkeptPCT\tfail.reason\tinitF\tfilteredF\tfinalF\tinitR\tfilteredR\tfinalR\tfwdBasesMatching\trevBasesMatching\t")
 
       var passingUMI = 0
       var totalWithUMI = 0
@@ -185,7 +204,7 @@ object Main extends App {
       var index = 0
 
       val cutsSiteObj = CutSites.fromFile(config.cutSites, 3)
-      outputStatsFile.write(cutsSiteObj.windows.zipWithIndex.map{case(wds,index) => "target" + (index+1)}.mkString("\t") + "\n")
+      outputStatsFile.write(cutsSiteObj.windows.zipWithIndex.map{case(wds,index) => "target" + (index+1)}.mkString("\t") + "\teventString1\teventString2\treadFRef\treadF\treadRRef\treadR\n")
       // --------------------------------------------------------------------------------
       // for each UMI -- process its individual reads
       // --------------------------------------------------------------------------------
@@ -194,11 +213,12 @@ object Main extends App {
         val reverseReads = umiReadsRVSReplacements(umi)
         val forwardReads = umiReadsFWDReplacements(umi)
 
-        println(reverseReads.size + "," + forwardReads.size)
         if (forwardReads.length > config.minimumUMIReads && reverseReads.length > config.minimumUMIReads) {
           val res = OutputManager.mergeTogether(umi,
             forwardReads,
             reverseReads,
+            umiReadsFWDReplacementsCounts(umi),
+            umiReadsRVSReplacementsCounts(umi),
             cutsSiteObj,
             outputFastq1File,
             outputFastq2File,

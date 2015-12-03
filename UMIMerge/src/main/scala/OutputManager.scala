@@ -1,6 +1,6 @@
 package main.scala
 
-import _root_.aligner.MAFFT2
+import _root_.aligner.{AlignmentManager, MAFFT, AlignmentManager$}
 import _root_.utils.{CutSites, Clustering}
 import aligner._
 import _root_.aligner.aligner.Waterman
@@ -22,6 +22,8 @@ object OutputManager {
   def mergeTogether(umi: String,
                     readsF: Array[SequencingRead],
                     readsR: Array[SequencingRead],
+                    readsFCount: Int,
+                    readsRCount: Int,
                     cutSites: CutSites,
                     outputFastq1: PrintWriter,
                     outputFastq2: PrintWriter,
@@ -49,8 +51,8 @@ object OutputManager {
 
       if (preparedFWD.size > 1 && preparedREV.size > 1) {
 
-        val mergedF = MAFFT2.alignTo(preparedFWD,None)
-        val mergedR = MAFFT2.alignTo(preparedREV,None)
+        val mergedF = MAFFT.alignTo(preparedFWD,None)
+        val mergedR = MAFFT.alignTo(preparedREV,None)
 
         // remove the reads that are a really poor match
         val fwdCleanedUp = Consensus.removeMismatchedReads(mergedF)
@@ -59,10 +61,9 @@ object OutputManager {
         if (fwdCleanedUp.size > 1 && revCleanedUp.size > 1) {
 
           // make a consensus from the remaining 'good' reads
-          val fwdConsensus = SequencingRead.stripDownToJustBases(Consensus.consensus(fwdCleanedUp))
-          val revConsensus = SequencingRead.stripDownToJustBases(Consensus.consensus(revCleanedUp))
-
-          //val mafftAlign = MAFFT2(fwdConsensus(0), revConsensus(0), ref, cutSiteInfo, primers)
+          val fwdConsensus = SequencingRead.stripDownToJustBases(Consensus.consensus(fwdCleanedUp, "ConsensusFWD"))
+          val revConsensus = SequencingRead.stripDownToJustBases(Consensus.consensus(revCleanedUp, "ConsensusREV"))
+          revConsensus.reverseCompAlign = true
 
           val forwardPrimer = fwdConsensus.bases contains primers(0)
           val reversePrimer = Utils.reverseComplement(revConsensus.bases) contains primers(1)
@@ -72,7 +73,6 @@ object OutputManager {
           if (readsKept < 0.5) failureReason += "notEnoughReadsRemaining;"
           if (!forwardPrimer) failureReason += "forwardPrimerMissing;"
           if (!reversePrimer) failureReason += "reversePrimerMissing;"
-          //if (!enoughReadsKept) failureReason += "notEnoughReadsRemaining;"
 
           if (failureReason == "") {
             failureReason = "PASS"
@@ -80,24 +80,46 @@ object OutputManager {
             outputFastq2.write(revConsensus.toFastqString(umi + "REV", false) + "\n")
           }
 
-          // get the overlap of cutsite events
-          try {
-            val cutEvents = MAFFT2.cutSiteEvents(ref, fwdConsensus, revConsensus, cutSites, 6)
+          val merged = ReadMerger.mergeRead(fwdConsensus,revConsensus)
+          if (merged.isDefined && merged.get._2 > 20 && merged.get._2.toDouble / merged.get._3.toDouble > 0.90) {
+            // get the overlap of cutsite events
+            try {
+              val cutEvents = AlignmentManager.cutSiteEvent(umi, ref, merged.get._1, cutSites, 6)
 
-            //write out the stats file information
-            outputStats.write(umi + "\t" + readsKept + "\t" + failureReason + "\t")
-            outputStats.write(readsF.size + "\t" + readsF.size + "\t" + mergedF.size + "\t")
-            outputStats.write(readsR.size + "\t" + readsR.size + "\t" + mergedR.size + "\t")
-            outputStats.write(fwdConsensus.bases + "\t" + revConsensus.bases + "\t" + cutEvents._1 + "\t" + cutEvents._2 + "\t" + cutEvents._3.mkString("\t") + "\n")
-            //outputStats.write(pairedEdits.mergedEvents.mkString("\t") + "\n") */
-          } catch {
-            case e: java.lang.IllegalStateException => {
-              println("ERROR: Unable to process UMI " + umi + " tossing out!!!" + e.getMessage)
-              return 0
+              //write out the stats file information
+              outputStats.write(umi + "\t" + readsKept + "\t" + failureReason + "\t")
+              outputStats.write(readsFCount + "\t" + readsF.size + "\t" + mergedF.size + "\t")
+              outputStats.write(readsRCount + "\t" + readsR.size + "\t" + mergedR.size + "\t")
+              outputStats.write(cutEvents._1 + "\t" + cutEvents._2 + "\t" + cutEvents._3.mkString("\t") + "\t")
+              outputStats.write(cutEvents._4.map{al => al.toEditString}.mkString("-") + "\tmerged\t")
+              outputStats.write(cutEvents._5 + "\t" + cutEvents._6 + "\tmerged\tmerged\n")
+            } catch {
+              case e: Exception => {
+                println("ERROR: Unable to process UMI " + umi + " tossing out!!!" + e.getMessage)
+                return 0
+              }
+              // case e: Exception => throw e
             }
-            case e: Exception => throw e
-          }
+          } else {
+            // get the overlap of cutsite events
+            try {
+              val cutEvents = AlignmentManager.cutSiteEvents(umi, ref, fwdConsensus, revConsensus, cutSites, 6)
 
+              //write out the stats file information
+              outputStats.write(umi + "\t" + readsKept + "\t" + failureReason + "\t")
+              outputStats.write(readsFCount + "\t" + readsF.size + "\t" + mergedF.size + "\t")
+              outputStats.write(readsRCount + "\t" + readsR.size + "\t" + mergedR.size + "\t")
+              outputStats.write(cutEvents._1 + "\t" + cutEvents._2 + "\t" + cutEvents._3.mkString("\t") + "\t")
+              outputStats.write(cutEvents._4.map{al => al.toEditString}.mkString("-") + "\t" + cutEvents._5.map{al => al.toEditString}.mkString("-") + "\t")
+              outputStats.write(cutEvents._6 + "\t" + cutEvents._7 + "\t" + cutEvents._8 + "\t" + cutEvents._9 + "\n")
+            } catch {
+              case e: Exception => {
+                println("ERROR: Unable to process UMI " + umi + " tossing out!!!" + e.getMessage)
+                return 0
+              }
+              // case e: Exception => throw e
+            }
+          }
 
 
         }

@@ -11,7 +11,7 @@ import scala.sys.process._
 /**
  * Created by aaronmck on 11/17/15.
  */
-case class SmithWaterman(reads: Array[SequencingRead], referenceFile: File) extends Aligner {
+case class SmithWaterman(reads: Array[SequencingRead], referenceFile: File) { //extends Aligner {
 
   // ----------------------------------------------------------------------
   // setup a BWA run and farm it out the machine

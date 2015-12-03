@@ -77,7 +77,7 @@ object Main extends App {
       // ------------------------------------------------------------------------------------------------------------------------
       // setup a distance matrix
       // ------------------------------------------------------------------------------------------------------------------------
-      val distances = new DistanceMatrix(statsFile.allEvents, SumLogDistance(eventCounter, 1, 2))
+      val distances = new DistanceMatrix(statsFile.events, SumLogDistance(eventCounter, 1, 2))
       distances.toDistanceFile(config.distanceMatrixFile)
 
       // ------------------------------------------------------------------------------------------------------------------------

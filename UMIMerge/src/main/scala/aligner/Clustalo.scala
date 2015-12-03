@@ -2,9 +2,11 @@ package aligner
 
 import java.io._
 
+import main.scala.utils.Utils
+
 import scala.collection.mutable._
 import scala.io._
-import scala.main.SequencingRead
+import scala.main.{ReadDirection, SequencingRead}
 import scala.sys.process._
 
 /**
@@ -15,78 +17,83 @@ import scala.sys.process._
 // process reads to and from the clustalo algorithm
 //
 // ------------------------------------------------------------------------------------------
-case class Clustalo(umi: String, reads: Array[SequencingRead]) extends Aligner {
-
-  var currentReadName: Option[String] = None
-  var currentRead = ""
-  var readLength = 0
-
-
-  // map the input read name to the read, so we can reset the UMI, direction, etc
-  // ------------------------------------------------------------------------------
-  val mappedReads = new HashMap[String,SequencingRead]()
-  reads.foreach{rd => mappedReads(rd.name) = rd}
-
-
-  // our temp file we've written to
-  // ------------------------------------------------------------------------------
-  val tmpFile = clustal_reads()
-  val postMergedReads = fetchReads(tmpFile)
-
-
-  // map our input reads from their name
-  // ------------------------------------------------------------------------------
-  def fetchReads(alignedFile: File): Array[SequencingRead] = {
-    var returnReads = Array[SequencingRead]()
-    Source.fromFile(alignedFile).getLines().foreach { line => {
-      if (line startsWith ">") {
-        if (currentReadName.isDefined) {
-          if (!(mappedReads contains currentReadName.get))
-            throw new IllegalStateException("Unable to find the read we send out: " + currentReadName.get + " in our input reads")
-          val oldRead = mappedReads(currentReadName.get)
-          returnReads :+= SequencingRead(currentReadName.get, currentRead, {"H" * currentRead.length}.mkString(""), oldRead.readOrientation, oldRead.umi)
-
-          readLength = currentRead.length
-          currentRead = ""
-          currentReadName = Some(line.stripPrefix(">"))
-        } else {
-          currentReadName = Some(line.stripPrefix(">"))
-        }
-      } else {
-        currentRead += line
-      }
-    }
-    }
-
-    // if we have a read, save it off
-    // ------------------------------------------------------------------------------
-    if (currentReadName.isDefined) {
-      if (!(mappedReads contains currentReadName.get))
-        throw new IllegalStateException("Unable to find the read we send out: " + currentReadName.get + " in our input reads")
-      val oldRead = mappedReads(currentReadName.get)
-
-      returnReads :+= SequencingRead(currentReadName.get, currentRead, {
-        "H" * currentRead.length
-      }.mkString(""), oldRead.readOrientation, oldRead.umi)
-    }
-    return(returnReads)
-  }
-
+object Clustalo extends Aligner {
   /**
-   * do the actual clustal run with our reads
-   * @return the file containing the alignment
+   * align two sequences
+   * @param reads a list of reads, which we pull sequence out of
+   * @param ref the reference sequence
+   * @param debug dump a lot of info
+   * @return a array of aligned sequencing reads, the reference will be the first
    */
-  def clustal_reads(): File = {
-    // setup a CLUSTAL run and farm it out the machine
-    val tmp = java.io.File.createTempFile("UMIMerger" + umi, ".txt")
+  def alignTo(reads: Array[SequencingRead], ref: Option[String], debug: Boolean = false): Array[SequencingRead] = {
+    val tmp = java.io.File.createTempFile("UMIMergerBWA", ".txt")
     val tmpWriter = new PrintWriter(tmp)
-    reads.foreach { case (read) => tmpWriter.write("> " + read.name + "\n" + read.bases.filter{bs => bs != '-'}.mkString("") + "\n") }
-    tmpWriter.close()
-    val tmpOutput = java.io.File.createTempFile("UMIMerger" + umi, ".post.txt")
-    val clustoResult = ("clustalo --dealign --force --pileup -i " + tmp + " -o " + tmpOutput).!!
-    //println("Clustal: Input " + tmp + " and output " + tmpOutput)
-    return tmpOutput
-  }
+    var readDirections = Array[ReadDirection]()
 
+    // write the reads / reference to the input file
+    if (ref.isDefined)
+      tmpWriter.write(">reference\n" + ref.get + "\n")
+    reads.foreach {
+      rd =>
+        if (rd.reverseCompAlign)
+          tmpWriter.write(">" + rd.name + "\n" + Utils.reverseComplement(rd.bases.filter {
+            bs => bs != '-'
+          }.mkString("")) + "\n")
+        else
+          tmpWriter.write(">" + rd.name + "\n" + rd.bases.filter {
+            bs => bs != '-'
+          }.mkString("") + "\n")
+    }
+    tmpWriter.close()
+
+    // make an array of SequenceReads to store the result in
+    var ret = Array[SequencingRead]()
+
+    /**
+     * Run MAFFT and capture the output
+     */
+    val out = new StringBuilder
+    val err = new StringBuilder
+    val logger = ProcessLogger(
+      (o: String) => out.append(o + "\n"),
+      (e: String) => err.append(e + "\n"))
+
+    if (debug)
+      println("clustalo --dealign --force --pileup -i " + tmp)
+    ("clustalo --dealign --force --pileup -i " + tmp) ! logger
+
+    /**
+     * now readback each read figure out the alignment
+     */
+    var readNames = Array[String]()
+    var readStrings = Array[String]()
+    var currentRead = ""
+
+    out.toString().split("\n") foreach {
+      line =>
+        if (line startsWith ">") {
+          if (currentRead != "")
+            readStrings :+= currentRead
+          currentRead = ""
+          readNames :+= line.stripPrefix(">")
+        } else {
+          currentRead += line.toUpperCase
+        }
+    }
+    if (currentRead != "")
+      readStrings :+= currentRead
+
+    if ((ref.isDefined && readStrings.length != reads.size + 1) || (!ref.isDefined && readStrings.length != reads.size)) {
+      throw new IllegalStateException("DIDNT get all our reads back: " + readStrings.length + " instead of " + reads.size)
+    }
+    for (i <- 0 until readStrings.length) {
+      if (debug)
+        println(readStrings(i))
+      ret :+= Aligner.SequencingReadFromNameBases(readNames(i), readStrings(i))
+    }
+
+    //tmp.delete()
+    return ret
+  }
 
 }

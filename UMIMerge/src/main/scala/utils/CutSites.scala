@@ -29,6 +29,7 @@ object CutSites {
       cut.startSites(index) = sp(1).toInt
       cut.fullSites :+=(sp(0), sp(1).toInt, sp(2).toInt)
       cut.windows :+=(sp(2).toInt - windowSize, sp(2).toInt, sp(2).toInt + windowSize)
+      //println((sp(2).toInt - windowSize) + "\t" +  sp(2).toInt + "\t" + (sp(2).toInt + windowSize))
     }
     }
 
