@@ -86,12 +86,13 @@ object OutputManager {
             try {
               val cutEvents = AlignmentManager.cutSiteEvent(umi, ref, merged.get._1, cutSites, 6)
 
+              val edit = cutEvents._4.map{al => al.toEditString}.mkString("-")
               //write out the stats file information
               outputStats.write(umi + "\t" + readsKept + "\t" + failureReason + "\t")
               outputStats.write(readsFCount + "\t" + readsF.size + "\t" + mergedF.size + "\t")
               outputStats.write(readsRCount + "\t" + readsR.size + "\t" + mergedR.size + "\t")
               outputStats.write(cutEvents._1 + "\t" + cutEvents._2 + "\t" + cutEvents._3.mkString("\t") + "\t")
-              outputStats.write(cutEvents._4.map{al => al.toEditString}.mkString("-") + "\tmerged\t")
+              outputStats.write((if (edit == "") "UNALIGNED" else edit) + "\tmerged\t")
               outputStats.write(cutEvents._5 + "\t" + cutEvents._6 + "\tmerged\tmerged\n")
             } catch {
               case e: Exception => {

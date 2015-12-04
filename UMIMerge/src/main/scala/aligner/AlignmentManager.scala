@@ -271,7 +271,7 @@ object AlignmentManager {
    * @param read the read string of the same length as the reference string
    * @return a proportion of bases that match
    */
-  def percentMatch(ref: String, read: String): Double = {
+  def percentMatch(ref: String, read: String, minimumAlignedBases: Int = 50): Double = {
     var bases = 0
     var matches = 0
     ref.zip(read).foreach { case (refBase, readBase) => {
@@ -282,6 +282,9 @@ object AlignmentManager {
       }
     }
     }
+
+    if (bases < minimumAlignedBases)
+      return -1.0
     matches.toDouble / bases.toDouble
   }
 
