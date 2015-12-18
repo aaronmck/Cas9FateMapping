@@ -3,7 +3,7 @@ import java.io._
 import scala.collection.mutable._
 import scala.util.matching.Regex
 
-val tearsheet = Source.fromFile(args(0)).getLines()
+val statsFiles = args(0).split(",")
 val output = new PrintWriter(args(1))
 val output2 = new PrintWriter(args(2))
 
@@ -17,12 +17,13 @@ val passString = "PASS"
 //----------------------------------------------------------------------------------------------------------------
 var outputHeader = false
 
-tearsheet.foreach{line => {
-  val sp = line.split("\t")
+statsFiles.foreach{statFileLine => {
+  /*val sp = line.split("\t")
   val outputDir = sp(3)
   val sample = sp(0)
 
-  val statsFile = new File(outputDir + "/" + sample + "/" + sample + ".stats")
+  val statsFile = new File(outputDir + "/" + sample + "/" + sample + ".stats")*/
+  val statsFile = new File(statsFileLine)
 
   if (statsFile.exists) {
     val openStatsFile = Source.fromFile(statsFile).getLines()
@@ -43,7 +44,7 @@ tearsheet.foreach{line => {
       val revMatch = sp(headerTokens("revBasesMatching")).toDouble
       val passFail = sp(headerTokens("fail.reason"))
 
-      if (fwdMatch > minBasesMatchingPostAlignment && revMatch > minBasesMatchingPostAlignment && passFail == passString && !(line contains "&")) {
+      if (fwdMatch > minBasesMatchingPostAlignment /*&& revMatch > minBasesMatchingPostAlignment*/ && passFail == passString && !(line contains "&")) {
         output.write(sample + "\t" + line + "\n")
         usedLines += 1
       }
@@ -52,6 +53,8 @@ tearsheet.foreach{line => {
     println("processed " + statsFile + " with " + usedLines + " UMIs used of a total " + totalLines + " UMIs")
     output2.write(sample + "\t" + usedLines + "\t" + totalLines + "\n")
 
+  } else {
+    throw new IllegalStateException("Unable to find file " + statsFileLine)
   }
 }}
 output2.close()

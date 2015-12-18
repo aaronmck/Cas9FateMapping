@@ -1,10 +1,12 @@
+import argparse
 
-parser.add_argument('--input', help='input site', required=True)
-parser.add_argument('--output', help='output site', required=True, nargs='*')
+parser = argparse.ArgumentParser(description='Merge some files')
+parser.add_argument('--input', help='input site', required=True, nargs='*')
+parser.add_argument('--output', help='output site', required=True)
 args = parser.parse_args()
 
 
-output_file = open(args.output_sites,"w")
+output_file = open(args.output,"w")
 
 for inp in args.input:
     vl = open(inp)

@@ -1,14 +1,8 @@
-
-# coding: utf-8
-
-# In[1]:
-
 import itertools
 import sys,math
 import numpy as np
 import os.path
-
-# In[2]:
+import argparse
 
 # given the target file, find the guides of interest, remove non-PAM hits and self-hits
 def getlines(fl,target):
@@ -18,9 +12,6 @@ def getlines(fl,target):
         if sp[3] == target and sp[4][0:20] != target and sp[4][22] == "G" and sp[4][21] == "G" and int(sp[6]) < 5 and len(sp[0]) < 3:
             lines.append(sp)
     return(lines)
-
-
-# In[3]:
 
 def score_targets(lines):
     # our scoring array
@@ -39,9 +30,6 @@ def score_targets(lines):
         scores.append((score,mismatches))
     return(scores)
 
-
-# In[4]:
-
 def distance(crispr1,crispr2,max_length=23):
     mismatch = 0
     for pair in itertools.izip(crispr1[0:max_length],crispr2[0:max_length]):
@@ -56,15 +44,10 @@ def get_distances(lines):
     return(distances)
 
 
-# In[5]:
-
 def get_mean_dist(distances):
     if len(distances) > 0:
         return(float(sum(distances))/float(len(distances)))
     return(20)
-
-
-# In[6]:
 
 def get_total_score(lines,scores,mean_distance):
     total_score = []
@@ -72,17 +55,11 @@ def get_total_score(lines,scores,mean_distance):
         total_score.append((lines[index][4],(score[0] * (1.0/(((19.0-mean_distance)/19.0)*4.0+1.0)) * (1.0/(score[1]) * 1.0/(score[1])))))
     return(total_score)
 
-
-# In[7]:
-
 def get_final_score(total_score):
     final = 100.0
     for scr in total_score:
         final += 100.0 * scr[1]
     return((100.0 /  (final)) * 100.0)
-
-
-# In[8]:
 
 # score the on-target hits -- taken from broad site, this code is a mess.
 def calc_score(s):
@@ -118,20 +95,9 @@ def calc_score(s):
     partial_score = math.e**-score
     final_score = 1/(1+partial_score)
     return final_score
-# calc_score("TCTTAAGCAGAACAAGGGCA")
+# test -- calc_score("TCTTAAGCAGAACAAGGGCA")
 
 
-# In[9]:
-
-
-#current_file = "subset.75.output.bed"
-#crispr_of_interest = "TCTTAAGCAGAACAAGGGCA"
-
-#molly_sites = "/mount/vol10/CRISPR.lineage/nobackup/CRISPR.Site.Finder/DeepFry/test_dir/hits_for_molly_with_chr_with_repeats.bed"
-#output_file = "/mount/vol10/CRISPR.lineage/nobackup/CRISPR.Site.Finder/scored.molly.sites.txt"
-#input_dir = "/mount/vol10/CRISPR.lineage/nobackup/CRISPR.Site.Finder/DeepFry/test_dir/new_output/"
-
-# In[ ]:
 
 def score_crispr(input_file,crispr):
     lines = getlines(input_file,crispr)
@@ -141,35 +107,31 @@ def score_crispr(input_file,crispr):
     if len(lines) > 2000:
         print("CRISPR " + crispr + " dropped, too many hits")
         return("dropped_too_many_hits(>2000):" + str(len(lines)))
-    
+
     scores = score_targets(lines)
     mean_dist = get_mean_dist(get_distances(lines))
     ind_scores = get_total_score(lines,scores,mean_dist)
     final_score = get_final_score(ind_scores)
-    
+
     zippedHits = []
     for hit in itertools.izip(lines,ind_scores):
         zippedHits.append(hit[0][0] + "_" + hit[0][1]  + "_" + hit[0][2]+ "_" + hit[0][4] + "_" + hit[0][5]  + "_" + str(100.0*hit[1][1]))
-    
+
     final_line = "off-target=" + str(final_score) + ";on-target=" + str(100.0*calc_score(crispr)) + ";off-target-count=" + str(len(zippedHits)) + ";off-target-hits=" + ";".join(zippedHits)
     return(final_line)
 
 
-# In[ ]:
-#annotations = {}
-#for ln in open(molly_annot):
-#    ll = ln.strip().split("\t")
-#    if annotations.has_key(ll[3]):
-#        annotations[ll[3]] = annotations[ll[3]] + "," + ll[7]
-#    else:
-#        annotations[ll[3]] = ll[7]
+parser.add_argument('--input_sites', help='input site', required=True)
+parser.add_argument('--output_sites', help='output site', required=True)
 
-input_sites = "/net/shendure/vol10/projects/CRISPR.lineage/nobackup/2015_07_30_GenomeScans/total.scores.txt"
-output_file = "/net/shendure/vol10/projects/CRISPR.lineage/nobackup/2015_07_30_GenomeScans/total.scores_scr.txt"
+args = parser.parse_args()
+
+input_sites = args.input_sites
+output_file = args.output_sites
 
 
 output = open(output_file,"w")
-for line in open("/net/shendure/vol10/projects/CRISPR.lineage/nobackup/2015_07_30_GenomeScans/scores.txt"):
+for line in open(input_sites):
     guide = line.split("\t")[1]
     if os.path.isfile(input_sites):
         print "scoring from " + input_sites
@@ -177,10 +139,3 @@ for line in open("/net/shendure/vol10/projects/CRISPR.lineage/nobackup/2015_07_3
         output.write(guide + "\t" + sc + "\n")
 
 output.close()
-        
-
-
-# In[ ]:
-
-
-
