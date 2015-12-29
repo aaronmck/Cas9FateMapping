@@ -1,0 +1,184 @@
+---
+title: "Event summaries"
+author: "Aaron McKenna"
+date: "December 22, 2015"
+output: html_document
+---
+
+```{r, echo=FALSE}
+library(ggplot2)
+library(ape)
+library('phangorn')
+library('RColorBrewer')
+library('reshape')
+options(bitmapType='cairo')
+Sys.setenv("DISPLAY"=":0.0")
+
+# embryo.stats = read.delim("/mount/vol10/CRISPR.lineage/nobackup/2015_10_06_Zebrafish_Initial_MiSeq/data/pipeline_output/aggregate_embryos/merged.stats",stringsAsFactors = F)
+
+target.columns = c("target1","target2","target3","target4","target5","target6","target7","target8","target9","target10")
+target.columns.nums = match(target.columns,colnames(embryo.stats))
+embryo.stats$counts = apply(embryo.stats[,target.columns.nums],1,function(x) {sum(x != "NONE")})
+```
+
+Number of events per embryo:
+
+```{r, fig.width=18, fig.height=5, dpi = 144, echo=FALSE, warning=TRUE, message=TRUE}
+
+ggplot(embryo.stats) + 
+  geom_histogram(aes(counts,fill=sample),binwidth=1) + 
+  facet_grid(~ sample) + 
+  theme_classic() + 
+  ggtitle("Number of edited sites per sample") + 
+  ylab("Edit count") 
+
+```
+
+Number of events per per embryo (stacked):
+
+```{r, fig.width=18, fig.height=5, dpi = 144, echo=FALSE, warning=FALSE, message=FALSE}
+ggplot(embryo.stats, aes(counts)) + 
+  geom_histogram(aes(fill=sample)) + 
+  theme_classic() + 
+  ggtitle("Number of edited sites per sample") + 
+  xlab("Number of edited sites per read (out of 10)") +
+  ylab("Edit count")
+
+```
+
+Diversity of edits at each target 1:
+
+```{r, fig.width=18, fig.height=5, dpi = 144, echo=FALSE, warning=FALSE, message=FALSE}
+event.melt <- melt(embryo.stats,id.vars=c("sample"),measure.vars=target.columns)
+
+# remove the insertion string from the end of events
+event.melt <- event.melt[event.melt$value != "NONE",]
+event.subset <- function(x) {paste(strsplit(x,"\\+")[[1]][1:2],collapse="+")}
+event.melt$value <- sapply(as.character(event.melt$value),event.subset) 
+
+tgt = "target1"
+event.to.display = 75
+
+plot.subset <- function(tgt) {
+  target.subset <- event.melt[event.melt$variable==tgt,]
+  target.subset <- within(target.subset, 
+                       value <- factor(value, 
+                                levels=names(sort(table(value), 
+                                       decreasing=TRUE))))
+    
+  events.to.use = names(sort(table(target.subset$value), decreasing=TRUE))
+  
+  ggplot(target.subset[is.element(target.subset$value,events.to.use[1:event.to.display]),]) + 
+    geom_histogram(aes(value,fill=sample)) + 
+    theme_classic() + 
+    theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+    ggtitle(paste("Site:",tgt,",",event.to.display,"events of total",length(events.to.use),"events"))
+}
+plot.subset("target1")
+```
+
+Diversity of edits at each target 2:
+
+```{r, fig.width=18, fig.height=5, dpi = 144, echo=FALSE, warning=FALSE, message=FALSE}
+plot.subset("target2")
+```
+
+Diversity of edits at each target 3:
+
+```{r, fig.width=18, fig.height=5, dpi = 144, echo=FALSE, warning=FALSE, message=FALSE}
+plot.subset("target3")
+```
+
+Diversity of edits at each target 4:
+
+```{r, fig.width=18, fig.height=5, dpi = 144, echo=FALSE, warning=FALSE, message=FALSE}
+plot.subset("target4")
+```
+
+Diversity of edits at each target 5:
+
+```{r, fig.width=18, fig.height=5, dpi = 144, echo=FALSE, warning=FALSE, message=FALSE}
+plot.subset("target5")
+```
+
+Diversity of edits at each target 6:
+
+```{r, fig.width=18, fig.height=5, dpi = 144, echo=FALSE, warning=FALSE, message=FALSE}
+plot.subset("target6")
+```
+
+Diversity of edits at each target 7:
+
+```{r, fig.width=18, fig.height=5, dpi = 144, echo=FALSE, warning=FALSE, message=FALSE}
+plot.subset("target7")
+```
+
+Diversity of edits at each target 8:
+
+```{r, fig.width=18, fig.height=5, dpi = 144, echo=FALSE, warning=FALSE, message=FALSE}
+plot.subset("target8")
+```
+
+Diversity of edits at each target 9:
+
+```{r, fig.width=18, fig.height=5, dpi = 144, echo=FALSE, warning=FALSE, message=FALSE}
+plot.subset("target9")
+```
+
+Diversity of edits at each target 10:
+
+```{r, fig.width=18, fig.height=5, dpi = 144, echo=FALSE, warning=FALSE, message=FALSE}
+plot.subset("target10")
+```
+
+Common HMIDs per sample:
+
+```{r, fig.width=18, fig.height=7, dpi = 72, echo=FALSE, warning=FALSE, message=FALSE}
+target.columns.subset = embryo.stats[,target.columns]
+embryo.stats$hmids = apply(target.columns.subset,1,function(x) {paste(x,collapse = ",")})
+
+event.melt.hmids <- melt(embryo.stats,id.vars=c("sample"),measure.vars=c("hmids"))
+
+event.melt.hmids <- within(event.melt.hmids, 
+                       value <- factor(value, 
+                                levels=names(sort(table(value), 
+                                       decreasing=TRUE))))
+    
+event.melt.hmids.use = names(sort(table(event.melt.hmids$value), decreasing=TRUE))
+event.to.display.hmid = 50
+
+ggplot(event.melt.hmids[is.element(event.melt.hmids$value,event.melt.hmids.use[1:event.to.display.hmid]),]) + 
+  geom_histogram(aes(value,fill=sample)) + 
+  theme_classic() + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  ggtitle(paste("HMIDs:",event.to.display.hmid,"events of total",length(event.melt.hmids.use),"events")) +
+  coord_flip()
+```
+
+Proportion of HMIDs shared by individual organs.  Important point, this is not symetric, as this is the proportion of an organs HMIDs seen in another organ, whereas the reverse may not be true (as the other organ may be more diverse, etc).  This is is not the unique list, so if an organ has 50% of it's HMIDs as a single event, and this is seen at least once in the other organ, then we score it (at least) 0.5:
+
+```{r fig.width=10, fig.height=10, dpi = 152, echo=FALSE, warning=FALSE, message=FALSE}
+
+hmid_overlaps = NULL
+for (sample1 in unique(embryo.stats$sample)) {
+  sample1length =length(embryo.stats[embryo.stats$sample == sample1,"hmids"])
+  for (sample2 in unique(embryo.stats$sample)) {
+    overlap = sum(is.element(embryo.stats[embryo.stats$sample == sample1,"hmids"],embryo.stats[embryo.stats$sample == sample2,"hmids"]))
+    
+    row.values = c(sample1, sample2, overlap, sample1length, as.double((overlap * 1.0)/(sample1length * 1.0)))
+    hmid_overlaps <- rbind(hmid_overlaps,row.values,deparse.level = 0 )
+  }
+}
+hmid_overlaps <- as.data.frame(hmid_overlaps,row.names=NULL,stringsAsFactors=F)
+colnames(hmid_overlaps) <- c("Sample1","Sample2","Sample1HHMIDCount","Sample1sample2Overlap","OverlapProporiton")
+hmid_overlaps$OverlapProporiton = as.double(hmid_overlaps$OverlapProporiton)
+ggplot(data = hmid_overlaps, aes(x=Sample1, y=Sample2, fill=as.double(OverlapProporiton))) + 
+  geom_tile(color = "white") + 
+  scale_fill_gradient2(low = "white", high = "red", limit = c(0,1), space = "Lab", name="Shared Proportion of HMIDs") +
+  theme_minimal() + 
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, size = 12, hjust = 1)) +
+  theme(axis.text.y = element_text(size = 12)) +
+  coord_fixed()
+
+
+```

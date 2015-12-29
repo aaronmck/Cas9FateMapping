@@ -36,6 +36,7 @@ for i in range(0,refLength):
         cutString += "_"
 
 # eventString1
+print "Site edits:"
 print "1:\t" + stats_line[stats_header.index("target1")]
 print "2:\t" + stats_line[stats_header.index("target2")]
 print "3:\t" + stats_line[stats_header.index("target3")]
@@ -46,11 +47,25 @@ print "7:\t" + stats_line[stats_header.index("target7")]
 print "8:\t" + stats_line[stats_header.index("target8")]
 print "9:\t" + stats_line[stats_header.index("target9")]
 print "10:\t" + stats_line[stats_header.index("target10")]
+
+print "\nreference, read1 (or merged), and cutsites:"
 print stats_line[stats_header.index("readFRef")]
 print stats_line[stats_header.index("readF")]
 print cutString
 
-print stats_line[stats_header.index("eventString2")]
+cutString = "only one read, see merged above"
+refIndex = 0
+if stats_line[stats_header.index("readRRef")] != "merged":
+    cutString = ""
+    for i in range(0,refLength):
+        if stats_line[stats_header.index("readRRef")][i] != '-':
+            refIndex += 1
+        if refIndex in cut_sites:
+            cutString += "^"
+        else:
+            cutString += "_"
+        
+print "\nreference, read2, and cutsites:"
 print stats_line[stats_header.index("readRRef")]
 print stats_line[stats_header.index("readR")]
 print cutString
