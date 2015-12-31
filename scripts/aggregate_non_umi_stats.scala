@@ -7,32 +7,47 @@ val statsFiles = args(0).split(",")
 val output = new PrintWriter(args(1))
 val output2 = new PrintWriter(args(2))
 
-output2.write("sample\tusedReads\tuniqueCigars\ttotalReads\n")
-
 val minBasesMatchingPostAlignment = 0.90
 val passString = "PASS"
-var outputHeader = false
+var totalMaxTargets = 12
 
-val keep_column_start = 0
-val keep_column_end_plus_one = 23
-
-
+output2.write("sample\tusedReads\tuniqueCigars\ttotalReads\n")
+output.write("readName\ttype\tmergedReadLen\tread1len\tread2len\tmatchRate1\talignedBases1\tmatchRate2\talignedBases2\thasForwardPrimer\thasReversePrimer\tkeep\t")
 
 statsFiles.foreach{statsFileLine => {
   val statsFile = new File(statsFileLine)
 
   if (statsFile.exists) {
-    val sample = statsFile.getName.split("\\.")(0)
+    val sampleSplit = statsFile.getName.split("\\.")
+    val sample = sampleSplit.slice(0,sampleSplit.length -1).mkString(".")
     val openStatsFile = Source.fromFile(statsFile).getLines()
     val header = openStatsFile.next()
     val headerTokens = new HashMap[String,Int]()
     header.split("\t").zipWithIndex.map{case(tk,ind) => headerTokens(tk) = ind}
 
-    if (!outputHeader) {
-      output.write("sample\t" + header.split("\t").slice(keep_column_start,keep_column_end_plus_one).mkString("\t") + "\n")
-      outputHeader = true
-    }
+    var maxTarget = 0
+    (1 until (100+1)).foreach{case(ind) => if (headerTokens contains ("target" + ind)) maxTarget = ind}
+    if (maxTarget > totalMaxTargets)
+      totalMaxTargets = maxTarget
+  }
+}}
 
+println("Max targets in dataset: " + totalMaxTargets)
+output.write((1 until (totalMaxTargets+1)).map{case(ind) => "target" + ind}.mkString("\t") + "\n")
+
+statsFiles.foreach{statsFileLine => {
+  val statsFile = new File(statsFileLine)
+
+  if (statsFile.exists) {
+    val sampleSplit = statsFile.getName.split("\\.")
+    val sample = sampleSplit.slice(0,sampleSplit.length -1).mkString(".")
+    val openStatsFile = Source.fromFile(statsFile).getLines()
+    val header = openStatsFile.next()
+    val headerTokens = new HashMap[String,Int]()
+    header.split("\t").zipWithIndex.map{case(tk,ind) => headerTokens(tk) = ind}
+
+    var maxTarget = 0
+    (1 until (totalMaxTargets+1)).foreach{case(ind) => if (headerTokens contains ("target" + ind)) maxTarget = ind}
 
     val uniqueCigar = new HashMap[String,Boolean]()
 
@@ -43,10 +58,11 @@ statsFiles.foreach{statsFileLine => {
       val fwdMatch = sp(headerTokens("matchRate1")).toDouble
       val passFail = sp(headerTokens("keep"))
 
-
       if (fwdMatch > minBasesMatchingPostAlignment /*&& revMatch > minBasesMatchingPostAlignment*/ && passFail == passString && !(line contains "WT_") && !(line contains "UNKNOWN")) {
-        output.write(sample + "\t" + sp.slice(keep_column_start,keep_column_end_plus_one).mkString("\t") + "\n")
-        val mergedCigar = (1 until 11).map{case(ind) => sp(headerTokens("target" + ind))}.mkString("-")
+        output.write(sample + "\t" + sp.mkString("\t") + "\t")
+        output.write((maxTarget until totalMaxTargets).map{tk => "NA"}.mkString("\t") + "\n")
+
+        val mergedCigar = (1 until (maxTarget +1)).map{case(ind) => sp(headerTokens("target" + ind))}.mkString("-")
         uniqueCigar(mergedCigar) = true
 
         usedLines += 1

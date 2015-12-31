@@ -182,3 +182,21 @@ ggplot(data = hmid_overlaps, aes(x=Sample1, y=Sample2, fill=as.double(OverlapPro
 
 
 ```
+
+How many HMIDs make up each sample (CDF plot):
+
+```{r fig.width=8, fig.height=8, dpi = 152, echo=FALSE, warning=FALSE, message=FALSE}
+
+hmid_overlaps = NULL
+full.sample.table = NULL
+for (sample1 in unique(embryo.stats$sample)) {
+  sample.table <- as.data.frame(table(embryo.stats[embryo.stats$sample == sample1,]$hmids))
+  sample.table$sample = sample1
+  colnames(sample.table) <- c("event","count","sample")
+  full.sample.table <- rbind(full.sample.table,sample.table)
+}
+
+ggplot(full.sample.table, aes(count, colour = sample)) + stat_ecdf() + theme_classic() + scale_x_log10() + xlab("HMID count (log)") + ylab("proportion of samples HMIDs")
+
+
+```

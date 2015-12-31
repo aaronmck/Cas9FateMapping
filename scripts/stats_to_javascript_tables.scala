@@ -143,7 +143,6 @@ val allEvents = eventToCount.toSeq.sortBy(_._2).toArray
 val topEvents = allEvents.slice(allEvents.size - plotTopXreads,allEvents.size).reverse
 def toPct(count: Int): Double = (count.toDouble / totalReads.toDouble)
 
-
 allEventsF.write("event\tarray\tcount\tproportion\n")
 allEvents.zipWithIndex.foreach{case((str,count),index) => {
   allEventsF.write(eventToCigar(str) + "\t" + index + "\t" + count + "\t" + toPct(count) + "\n")
@@ -152,10 +151,12 @@ allEventsF.close()
 
 
 occurances.write("array\tposition\tevent\n")
-readCounts.write("event\tarray\tcount\n")
+readCounts.write("event\tarray\tcount\tWT\n")
 
 topEvents.zipWithIndex.foreach{case((str,count),index) => {
-  readCounts.write(eventToCigar(str) + "\t" + index + "\t" + toPct(count) + "\n")
+  val isAllWT = eventToCigar(str).split("_").map{sat => if (sat == "NONE") 0 else 1}.sum == 0
+  val outWT = if (isAllWT) 1 else 2
+  readCounts.write(eventToCigar(str) + "\t" + index + "\t" + toPct(count) + "\t" + outWT + "\n")
   str.zipWithIndex.foreach{case(evt,subIndex) =>
     occurances.write(index + "\t" + subIndex + "\t" + evt + "\n")
   }
