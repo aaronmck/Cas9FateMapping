@@ -13,7 +13,7 @@ trait IndexedNode {
   def toFancyString(): String
   def newickString(distance: Double, totalDistance: Double, annotationOutput: PrintWriter): String
   def getEventStrings(): Array[String]
-  def getProportion(): Double
   def getCount(): Int
   def getSample(): String
+  def addSupport(additionalSupportCount: Int)
 }

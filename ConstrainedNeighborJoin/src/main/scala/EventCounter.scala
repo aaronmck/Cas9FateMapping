@@ -2,22 +2,25 @@ package main.scala
 
 import java.io.File
 
+import scala.collection.mutable
 import scala.collection.mutable.HashMap
 
 /**
  * Created by aaronmck on 11/25/15.
  */
-abstract class EventCounter(eventFile: StatsFile) {
-  def getEventCount(sample: String,event: String ): Double
+abstract class EventCounter(eventFile: InputTable) {
+  def getEventCount(sample: String, event: String): Double
+  def getAllSampleEvents(sample: String): HashMap[String,Double]
+  def getAllEvents(): HashMap[String,Double]
 }
 
-case class NormalizedEventCounter(eventF: StatsFile, numberOfCells: Double) extends EventCounter(eventF) {
+case class NormalizedEventCounter(eventF: InputTable, numberOfCells: Double) extends EventCounter(eventF) {
 
-  // a mapping of sample to event
+  // a mapping of sample -> event -> count
   val eventToCount = new HashMap[String, HashMap[String, Double]]()
   val eventToCountAll = new HashMap[String, Double]()
 
-  eventF.allEvents.foreach { case(evt1) => {
+  eventF.getAllEvents().foreach { case(evt1) => {
     if (!(eventToCount contains evt1.getSample()))
       eventToCount(evt1.getSample()) = new HashMap[String,Double]()
     evt1.getEventStrings().foreach { evtString =>
@@ -46,4 +49,7 @@ case class NormalizedEventCounter(eventF: StatsFile, numberOfCells: Double) exte
     else
       eventToCountNormalized(sample).getOrElse(event,0.01)
   }
+
+  override def getAllSampleEvents(sample: String): mutable.HashMap[String, Double] = eventToCount(sample)
+  override def getAllEvents(): mutable.HashMap[String, Double] = eventToCountAll
 }

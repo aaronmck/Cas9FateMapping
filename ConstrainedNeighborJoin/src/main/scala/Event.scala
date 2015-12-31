@@ -9,33 +9,38 @@ import scala.util.Random
 // Helper class -- contains most things we know about one of our events
 //
 // ------------------------------------------------------------------------------------------------------------------------
-case class Event(name: String, sample: String, numberOfReads: Int, proportionOfReads: Double, eventStrings: Array[String], inferred: Boolean = false) extends IndexedNode {
+case class Event(name: String, sample: String, supportCount: Int, eventStrings: Array[String], inferred: Boolean = false) extends IndexedNode {
 
   var left: Option[Event] = None
   var right: Option[Event] = None
   var branchLeft = 0.0
   var branchRight = 0.0
   var id = -1
+  var support_count = supportCount
 
   def setID(idVal: Int) = {id = idVal}
   def getID() = id
-  def getCount() = numberOfReads
+  def getCount() = support_count
   def getSample() = sample
+  def addSupport(additionalCount: Int) { support_count += additionalCount}
+
   def merge(otherNode: IndexedNode, branchLeft: Double, branchRight: Double, newID: Int, constrained: Boolean): IndexedNode = otherNode match {
     case other: Event => Event.merge(this,otherNode.asInstanceOf[Event],branchLeft,branchRight,newID,constrained)
     case _ => throw new IllegalStateException("Trying to merge a non-Event of IndexedNode with an Event")
   }
+
   def compatible(otherNode: IndexedNode): Boolean = otherNode match {
     case other: Event => Event.compatible(this, otherNode.asInstanceOf[Event])
     case _ => throw new IllegalStateException("Trying to compare a non-Event of IndexedNode with an Event")
   }
+
   def getEventStrings() = eventStrings
-  def getProportion(): Double = proportionOfReads
+
   /**
    * make a fancy string from this event for debug printing
    * @return a string representation
    */
-  def toFancyString(): String = name + "\t" + sample + "\t" + numberOfReads + "\t" +
+  def toFancyString(): String = name + "\t" + sample + "\t" + support_count + "\t" +
     eventStrings.mkString("\t") + "\t" + left.isDefined + "\t" + right.isDefined
 
   /**
@@ -52,7 +57,7 @@ case class Event(name: String, sample: String, numberOfReads: Int, proportionOfR
     val ret = id + ":" + newDist
 
     var newSample = if (sample startsWith "M") "_" else sample
-    annotationOutput.write(id + "\t" + name + "\t" + newSample + "\t" + fullDistance + "\t" + numberOfReads + "\t" + eventStrings.mkString("-") + "\n")
+    annotationOutput.write(id + "\t" + name + "\t" + newSample + "\t" + fullDistance + "\t" + support_count + "\t" + eventStrings.mkString("-") + "\n")
 
     //println(ret + "(" + leftStr + "," + rightStr + ")")
     val rnd = new Random()
@@ -124,8 +129,7 @@ object Event {
 
     val ret = Event("MERGED" + mergeID,
       "M_L" + event1.sample + "_" + event2.sample + "J",
-      event1.numberOfReads + event2.numberOfReads,
-      event1.proportionOfReads + event2.proportionOfReads,
+      event1.support_count + event2.support_count,
       newEvtStr,
       true)
 

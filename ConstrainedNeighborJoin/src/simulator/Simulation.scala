@@ -1,5 +1,12 @@
-package main.scala
+package main.scala.simulator
 
+import main.scala.Config
+import main.scala.DistanceMatrix
+import main.scala.InputTable
+import main.scala.Main._
+import main.scala.NormalizedEventCounter
+import main.scala.StatsFile
+import main.scala.SumLogDistance
 
 import scala.io._
 import java.io._
@@ -33,14 +40,10 @@ import java.util.zip._
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
  *
  */
-case class Config(inputReadsTable: File = new File(Main.NOTAREALFILENAME),
-                  // newickFile: File = new File(Main.NOTAREALFILENAME),
-                  annotationFile: File = new File(Main.NOTAREALFILENAME),
-                  noneDistance: Double = 1.0,
-                  equalScore: Double = 1.0,
-                  distanceMatrixFile: File = new File(Main.NOTAREALFILENAME))
+case class Config(inputReadsTable: File = new File(Simulation.NOTAREALFILENAME),
+                  simulationOutput: File = new File(Simulation.NOTAREALFILENAME))
 
-object Main extends App {
+object Simulation extends App {
   val NOTAREALFILENAME = "/0192348102jr10234712930h8j19p0hjf129-348h512935"
   // please don't make a file with this name
   val NOTAREALFILE = new File(NOTAREALFILENAME)
@@ -51,15 +54,11 @@ object Main extends App {
 
     // *********************************** Inputs *******************************************************
     opt[File]("meltedUMIFile") required() valueName ("<file>") action { (x, c) => c.copy(inputReadsTable = x) } text ("(input) the UMI summary file")
-    //opt[File]("newickFile") required() valueName ("<file>") action { (x, c) => c.copy(newickFile = x) } text ("(output) our output Newick file")
-    opt[File]("annotations") required() valueName ("<file>") action { (x, c) => c.copy(annotationFile = x) } text ("(output) annotations for the output tree (used in FigTree)")
-    opt[File]("distanceMatrixFile") required() valueName ("<file>") action { (x, c) => c.copy(distanceMatrixFile = x) } text ("(output) our distance matrix file")
-    opt[Double]("noneDistance") valueName ("<file>") action { (x, c) => c.copy(noneDistance = x) } text ("the distance for two wild-type cut sites when comparing events")
-    opt[Double]("equalScore") valueName ("<file>") action { (x, c) => c.copy(equalScore = x) } text ("the distance for two identical edits at cut sites when comparing events")
+    opt[File]("simulationOutput") required() valueName ("<file>") action { (x, c) => c.copy(simulationOutput = x) } text ("(output) out simulation results")
 
-      // some general command-line setup stuff
-      note ("processes reads with UMIs into merged reads\n")
-      help ("help") text ("prints the usage information you see here")
+    // some general command-line setup stuff
+    note ("take in a input table, simulate trees from that data, and output summary stastics\n")
+    help ("help") text ("prints the usage information you see here")
   }
 
   parser.parse(args, Config()).map {
@@ -73,44 +72,24 @@ object Main extends App {
       // ------------------------------------------------------------------------------------------------------------------------
       println("reading in event file...")
       var statsFile : Option[InputTable] = None
-      statsFile = Some(StatsFile(config.inputReadsTable))
+      if (config.inputReadsTable.getAbsolutePath endsWith ".stats")
+        statsFile = Some(StatsFile(config.inputReadsTable))
+      else
+        statsFile = Some(CallFile(config.inputReadsTable))
 
       // ------------------------------------------------------------------------------------------------------------------------
       // events to counts -- count the total events over all positions
       // ------------------------------------------------------------------------------------------------------------------------
-      val eventCounter = new NormalizedEventCounter(statsFile.get, 200000.0 /* 200K */)
+      val eventCounter = new NormalizedEventCounter(statsFile.get,200000.0 /* 200K */)
 
       // ------------------------------------------------------------------------------------------------------------------------
       // setup a distance matrix
       // ------------------------------------------------------------------------------------------------------------------------
-      val distMetric = SumLogDistance(eventCounter, config.noneDistance, config.equalScore, 2)
-      //val distMetric = SimpleDistance(eventCounter)
-      val distances = new DistanceMatrix(statsFile.get.getUniqueEvents(), distMetric)
+      val distances = new DistanceMatrix(statsFile.get.getAllEvents(), SumLogDistance(eventCounter, 1, 2))
       distances.toDistanceFile(config.distanceMatrixFile)
 
-      // ------------------------------------------------------------------------------------------------------------------------
-      // find the minimum set of events
-      // ------------------------------------------------------------------------------------------------------------------------
-      //println("Performing merges (dot per merge)")
-      //val minSet = distances.minimizeSet(useConstraints)
+      // now start simulating events --
 
-      distances.toAnnotationFile(config.annotationFile, statsFile.get)
-      // ------------------------------------------------------------------------------------------------------------------------
-      // output the remaining nodes as tree
-      // ------------------------------------------------------------------------------------------------------------------------
-      /*
-      val newickFileOutput = new PrintWriter(config.newickFile)
-      val nodeStats = new PrintWriter(config.mergeInformation)
-
-      nodeStats.write("taxa\tname\tsample\tdepth\tnumberOfReads\tevents\n")
-
-      minSet.foreach{node => {
-        newickFileOutput.write("(" + node.newickString(1.0, 0.0, nodeStats) + ");\n")
-      }}
-
-      newickFileOutput.close()
-      nodeStats.close()
-      */
     }
   }
 

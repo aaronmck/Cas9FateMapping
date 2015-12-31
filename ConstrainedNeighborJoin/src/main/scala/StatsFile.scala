@@ -2,20 +2,19 @@ package main.scala
 
 import java.io.File
 
+import scala.collection.mutable
 import scala.collection.mutable.HashMap
 import scala.io.Source
 
 /**
  * load a stats file into a series of events
  */
-case class StatsFile(inputFile: File) {
+case class StatsFile(inputFile: File) extends InputTable {
 
   // read in the series of events
-  var events = Array[IndexedNode]()
-  var uniqueEvents = new HashMap[String, String]()
+  var uniqueEventsMapping = new HashMap[String, IndexedNode]()
   var allEvents = Array[IndexedNode]()
   val targetSiteCount = 10
-
 
   // read in our lines
   val inputLines = Source.fromFile(inputFile).getLines()
@@ -32,22 +31,37 @@ case class StatsFile(inputFile: File) {
   inputLines.foreach{line => {
     //println(line)
     val sp = line.split("\t")
-    val readCount = sp(header("finalF")).toInt + sp(header("finalR")).toInt
-    val readProp  = readCount.toDouble / (sp(header("initF")).toInt + sp(header("initR")).toInt).toDouble
-
     val eventStrings = sp.zipWithIndex.filter{case(tk,index) => eventColumns contains index}.map{case(tk,in) => tk}
-    val evt = Event(nodeIndex.toString, sp(0), readCount, readProp, eventStrings)
+    val evt = Event(nodeIndex.toString, sp(0), 1, eventStrings)
     nodeIndex += 1
     allEvents :+= evt
 
-    if (!(uniqueEvents contains eventStrings.mkString(""))) {
+    val keyString = sp(0) + "_" + eventStrings.mkString("")
+
+    if (!(uniqueEventsMapping contains keyString)) {
+      // println("non-duplicate event: " + keyString)
       val isAllNone = eventStrings.map { evt => if (evt == "NONE") 0 else 1 }.sum
       if (isAllNone > 0) {
-        events :+= evt
+        //println("all is none: " + isAllNone)
+        uniqueEventsMapping(keyString) = evt
       }
+    } else {
+      // println("duplicate event: " + keyString)
+      uniqueEventsMapping(keyString).addSupport(1)
     }
-    uniqueEvents(eventStrings.mkString("")) = "Sample_" + line.split("\t")(0)
-  }}
 
-  println("Processed " + events.size + " events")
+  }}
+  val uniqueEvents = uniqueEventsMapping.values.toArray
+  val uniqueEventsMappingStrings = uniqueEventsMapping.map{case(samplePlusEvent,event) => (samplePlusEvent,event.getEventStrings().mkString(""))}
+
+  println("Processed " + allEvents.size + " events")
+
+  // read in the series of events
+  override def getUniqueEvents(): Array[IndexedNode] = uniqueEvents
+
+  override def getUniqueMapping(): mutable.HashMap[String, String] = uniqueEventsMappingStrings
+
+  override def getTargetSiteCount(): Int = targetSiteCount
+
+  override def getAllEvents(): Array[IndexedNode] = allEvents
 }

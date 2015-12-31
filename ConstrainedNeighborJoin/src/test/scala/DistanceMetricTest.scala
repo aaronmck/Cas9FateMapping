@@ -41,6 +41,7 @@ case class FakeEvent(name: String) extends IndexedNode {
   override def getCount(): Int = 100
 
   override def getSample(): String = "SAMPLE"
+  def addSupport(additionalSupportCount: Int) {} // we dont care, do nothing}
 }
 
 /**

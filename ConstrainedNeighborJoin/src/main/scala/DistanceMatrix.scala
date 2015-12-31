@@ -397,4 +397,20 @@ class DistanceMatrix(events: Array[IndexedNode], distanceCalculator: DistanceMet
     output.close()
   }
 
+  /**
+   * write the annotation file out to disk
+   * @param outputFile the output file to write
+   */
+  def toAnnotationFile(outputFile: File, stats: InputTable): Unit = {
+    val output = new PrintWriter(outputFile.getAbsolutePath)
+
+    output.write("taxa\tsample\tcount\teventString\n")
+    stats.getUniqueEvents().foreach(ft => {
+      output.write(ft.getID() + "\t" + ft.getSample() + "\t" +
+        ft.getCount() + "\t" + ft.getEventStrings().mkString("-") + "\n")
+    })
+
+    output.close()
+  }
+
 }
