@@ -24,7 +24,7 @@ object Waterman extends Aligner {
 
 
   override def alignTo(reads: Array[SequencingRead], ref: Option[String], debug: Boolean): Array[SequencingRead] = {
-    alignTo(reads, ref, debug, 15.0, 0.05)
+    alignTo(reads, ref, debug, 10.0, 0.5)
   }
 
   def alignTo(reads: Array[SequencingRead], ref: Option[String], debug: Boolean, gapOpen: Double, gapExtend: Double): Array[SequencingRead] = {
@@ -74,7 +74,7 @@ object Waterman extends Aligner {
     }
 
     /**
-     * Run MAFFT and capture the output
+     * Run needlall and capture the output
      */
     val out = new StringBuilder
     val err = new StringBuilder
@@ -82,8 +82,8 @@ object Waterman extends Aligner {
       (o: String) => out.append(o + "\n"),
       (e: String) => err.append(e + "\n"))
 
-    val call = "needleall -datafile /net/shendure/vol10/projects/CRISPR.lineage/nobackup/reference_data/EDNAFULL " +
-      "-gapopen " + gapOpen + " -gapextend " + gapExtend + " -asequence " + tmp + " -bsequence " +
+    val call = "needleall -datafile /net/shendure/vol10/projects/CRISPR.lineage/nobackup/reference_data/EDNAFULL -endopen 10.0 -endextend 0.01 -snucleotide1 -snucleotide2 -gapopen " +
+      gapOpen + " -gapextend " + gapExtend + " -asequence " + tmp + " -bsequence " +
       tmp2 + " -aformat3 fasta -auto -stdout"
 
     (call) ! logger

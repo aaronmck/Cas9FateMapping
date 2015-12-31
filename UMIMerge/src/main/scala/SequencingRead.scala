@@ -314,6 +314,15 @@ object SequencingRead {
 
     SequencingRead(sequencingRead.name,bases,quals,sequencingRead.readOrientation,sequencingRead.umi)
   }
+
+  /**
+   * @param name read name
+   * @param bases bases as a string
+   * @return
+   */
+  def readFromNameAndSeq(name: String, bases: String): SequencingRead = {
+    SequencingRead(name,bases,"H"*bases.length,ForwardReadOrientation,"UNKNOWN")
+  }
 }
 
 object SequencingReadQualOrder extends Ordering[SequencingRead] {

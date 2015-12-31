@@ -127,7 +127,7 @@ class AlignmentManagerTest extends FlatSpec with Matchers {
 
     val combined = AlignmentManager.editsToCutSiteCalls(List[List[Alignment]](testCalls1,testCalls2),cutSites)
     combined._2.size should be (1)
-    combined._2(0) should be ("1D+5")
+    combined._2(0) should be ("WT_1D+5")
   }
 
   "A MAFFT" should "merge an dual-event and a non-event correctly" in {
@@ -148,8 +148,8 @@ class AlignmentManagerTest extends FlatSpec with Matchers {
     val combined = AlignmentManager.editsToCutSiteCalls(List[List[Alignment]](testCalls1,testCalls2),cutSites)
     combined._2.size should be (2)
     println(combined._2.mkString(")("))
-    combined._2(0) should be ("1D+5")
-    combined._2(1) should be ("2D+14")
+    combined._2(0) should be ("WT_1D+5")
+    combined._2(1) should be ("WT_2D+14")
   }
 
   "A MAFFT" should "merge an a collision correctly" in {

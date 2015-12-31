@@ -153,8 +153,8 @@ object AlignmentManager {
 
     val combined = editsToCutSiteCalls(List[List[Alignment]](events1, events2), cutSites, debug)
 
-    val matchRate1 = percentMatch(alignmentsF(0).bases, alignmentsF(1).bases)
-    val matchRate2 = percentMatch(alignmentsR(0).bases, alignmentsR(1).bases)
+    val matchRate1 = percentMatch(alignmentsF(0).bases, alignmentsF(1).bases)._1
+    val matchRate2 = percentMatch(alignmentsR(0).bases, alignmentsR(1).bases)._1
 
 
     if (debug) {
@@ -196,23 +196,24 @@ object AlignmentManager {
       println("Events1 : \n" + events1.mkString("\n"))
     }
 
-    return (matchRate1, 0.0, combined._2,events1, alignmentsMerged(0).bases, alignmentsMerged(1).bases)
+    return (matchRate1._1, 0.0, combined._2,events1, alignmentsMerged(0).bases, alignmentsMerged(1).bases)
   }
 
-  /**
-   * do two intervals overlap
-   * @param pos1Start
-   * @param pos1End
-   * @param pos2Start
-   * @param pos2End
-   * @return
-   */
+
   def overlap(pos1Start: Int, pos1End: Int, pos2Start: Int, pos2End: Int): Boolean = (pos1Start, pos1End, pos2Start, pos2End) match {
     case (pos1S, pos1E, pos2S, pos2E) if pos1S <= pos2S && pos1E >= pos2E => true
     case (pos1S, pos1E, pos2S, pos2E) if pos2S <= pos1S && pos2E >= pos1E => true
     case (pos1S, pos1E, pos2S, pos2E) if pos1S <= pos2E && pos1E >= pos2S => true
     case (pos1S, pos1E, pos2S, pos2E) if pos2S <= pos1E && pos2E >= pos1S => true
     case _ => false
+  }
+
+  // does position span at least the whole length of pos 2? THIS IS DIRECTIONAL, watch out!
+  def span(pos1Start: Int, pos1End: Int, pos2Start: Int, pos2End: Int): Boolean = {
+    if (pos1Start < pos2Start && pos1End > pos2End)
+      true
+    else
+      false
   }
 
   /**
@@ -229,13 +230,18 @@ object AlignmentManager {
 
     cutSites.windows.foreach { case (start, cut, end) => {
       var candidates = Array[Alignment]()
-
+      var matchOverlap = false
 
       edits.foreach { editList =>
         editList.foreach { edit => {
           if ((edit.cigarCharacter == "D" && overlap(start, end, edit.refPos, edit.refPos + edit.refBase.length)) ||
-            edit.cigarCharacter == "I" && overlap(start, end, edit.refPos, edit.refPos + 1))
+            edit.cigarCharacter == "I" && overlap(start, end, edit.refPos, edit.refPos))
             candidates :+= edit
+          else if (edit.cigarCharacter == "M" && span(edit.refPos, edit.refPos + edit.refBase.length, start, end)) {
+            matchOverlap = true
+            if (candidates.size > 0)
+              println(candidates(0).toEditString + " " + edit.toEditString + " " + edit.refPos + " " + (edit.refPos + edit.refBase.length) + " " +  start + " " +  end)
+          }
         }
         }
       }
@@ -243,21 +249,25 @@ object AlignmentManager {
       if (debug)
         println("Site: " + start + "-" + end + ": " + candidates.mkString("\t") + "<<<")
 
-      if (candidates.size == 0)
-        ret :+= "NONE"
-      else if (candidates.size == 1)
-        ret :+= candidates(0).toEditString
-      else if (candidates.size == 2) {
-        // Do collision detection here -- do we have the same event?
-        if (candidates(0).toEditString == candidates(1).toEditString)
-          ret :+= candidates(0).toEditString
-        else {
+      (candidates.size, matchOverlap) match {
+        case (0,true)      => ret :+= "NONE"
+        case (0,false)     => ret :+= "UNKNOWN"
+        case (1,true)      => ret :+= "WT_" + candidates(0).toEditString
+        case (1,false)     => ret :+= candidates(0).toEditString
+        case (2,true)  if (candidates(0).toEditString == candidates(1).toEditString) => ret :+= "WT_" + candidates(0).toEditString
+        case (2,false) if (candidates(0).toEditString == candidates(1).toEditString) => ret :+= candidates(0).toEditString
+        case (2,true)      => {
+          collision = true
+          ret :+= "WT_" + candidates(0).toEditString + "&" + candidates(1).toEditString
+        }
+        case (2,false)      => {
+          collision = true
           ret :+= candidates(0).toEditString + "&" + candidates(1).toEditString
+        }
+        case _ => {
+          ret :+= candidates.map { t => t.toEditString }.mkString("&")
           collision = true
         }
-      } else {
-        ret :+= candidates.map { t => t.toEditString }.mkString("&")
-        collision = true
       }
     }
     }
@@ -269,27 +279,26 @@ object AlignmentManager {
    * for non gap bases, what is our matching proportion?
    * @param ref the reference string
    * @param read the read string of the same length as the reference string
-   * @return a proportion of bases that match
+   * @return a proportion of bases that match, and the count of non-gap bases
    */
-  def percentMatch(ref: String, read: String, minimumAlignedBases: Int = 50): Double = {
+  def percentMatch(ref: String, read: String, minimumAlignedBases: Int = 50): Tuple2[Double,Int]= {
     var bases = 0
     var matches = 0
+    var nonGap = 0
     ref.zip(read).foreach { case (refBase, readBase) => {
       if (refBase != '-' && readBase != '-') {
-        if (refBase == readBase)
+        if (refBase == readBase) {
           matches += 1
+          nonGap += 1
+        }
         bases += 1
       }
     }
     }
 
     if (bases < minimumAlignedBases)
-      return -1.0
-    matches.toDouble / bases.toDouble
+      (-1.0,0)
+    else
+      (matches.toDouble / bases.toDouble,nonGap)
   }
-
-
-
-
-
 }
