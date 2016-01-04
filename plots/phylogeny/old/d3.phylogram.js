@@ -251,7 +251,6 @@ if (!d3) { throw "d3 wasn't included!"};
         return node.branchset
       })
       .separation(function(a, b) {
-              return 1 /*
               if (a.name != "" && b.name != "") {
                 return distanceScale * (0.5 * nodeTransform(a.name) + 0.5 * nodeTransform(b.name))
               } else if (a.name == "") {
@@ -260,7 +259,6 @@ if (!d3) { throw "d3 wasn't included!"};
                 return distanceScale * nodeTransform(a.name)
               } else {
                 return distanceScale
-              }*/
             });
 
     var diagonal = options.diagonal || d3.phylogram.rightAngleDiagonal();
