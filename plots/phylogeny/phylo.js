@@ -2,15 +2,12 @@
  * Created by aaronmck on 1/3/16.
  */
 
+var catagoricalColors = d3.scale.category20();
 
 // set the out and inner radius
 var outerRadius = 960 / 2,
     innerRadius = outerRadius - 170,
     fullAngle = 360;
-
-var color = d3.scale.category10()
-    .domain(["Bacteria", "Eukaryota", "Archaea"]);
-
 
 var svg = d3.select("#tree").append("svg")
     .attr("width", outerRadius * 2)
@@ -21,6 +18,19 @@ var chart = svg.append("g")
 
 var lifeData = ""
 var annotations = ""
+var nameToClade = ""
+var nameToEvents = ""
+var nameToCount = ""
+var nameToSample = ""
+
+var tip = d3.tip()
+    .attr('class', 'd3-tip')
+    .offset([-10, 0])
+    .html(function(d) {
+        return "<strong>Sample:</strong> <span style='color:red'>" + nameToSample[d.name]+ "</span><br><strong> UMI Count:</strong> <span style='color:red'>" + nameToCount[d.name]+ "</span><br><strong> Events:</strong> <span style=\'color:red\'>" + nameToEvents[d.name]+ "</span>";
+    })
+
+svg.call(tip);
 
 // ----------------------------------------------------------------------
 // put it all together
@@ -30,19 +40,27 @@ function render() {
     // ----------------------------------------------------------------------
     // some setup of color / data mappings ahead of svg creation
     // ----------------------------------------------------------------------
-    var catagoricalColors = d3.scale.category10();
 
-    var nameToClade = annotations.reduce(function(map, obj) {
+    nameToClade = annotations.reduce(function(map, obj) {
         map[obj.name] = obj.clade; return map;
     }, {});
 
+    nameToSample = annotations.reduce(function(map, obj) {
+        map[obj.name] = obj.sample; return map;
+    }, {});
+
+    nameToEvents = annotations.reduce(function(map, obj) {
+        map[obj.name] = obj.events; return map;
+    }, {});
+
     var counts = new Array();
-    var nameToCount = annotations.reduce(function(map, obj) {
+    nameToCount = annotations.reduce(function(map, obj) {
         counts.push(+obj.count);
         map[obj.name] = +obj.count; return map;
     }, {});
 
-    var angleScale = 360.0 / d3.sum(counts)
+    var angleScale = 180.0 / d3.sum(counts) // 230 instead of 360 to underpack by a bunch, with the min below we tend to need this
+    var minSeperation = 0.5
 
     var cluster = d3.layout.cluster()
         .size([fullAngle, innerRadius])
@@ -57,13 +75,13 @@ function render() {
         })
         .separation(function (a, b) {
             if (a.name != "" && b.name != "") {
-                return (0.5 * angleScale * (nameToCount[a.name] + nameToCount[b.name]))
+                return Math.max(minSeperation, (0.5 * angleScale * (nameToCount[a.name] + nameToCount[b.name])))
             } else if (a.name == "") {
-                return (0.5 * angleScale * nameToCount[b.name])
+                return Math.max(minSeperation,  (angleScale * nameToCount[b.name]))
             } else if (b.name == "") {
-                return (0.5 * angleScale * nameToCount[a.name])
+                return Math.max(minSeperation,  (angleScale * nameToCount[a.name]))
             } else {
-                return (0.5 * angleScale)
+                return Math.max(minSeperation,  (angleScale))
             }
         });
 
@@ -72,7 +90,7 @@ function render() {
         links = cluster.links(nodes),
         input = d3.select("#show-length input").on("change", changed),
         timeout = setTimeout(function () {
-            input.property("checked", true).each(changed);
+            input.property("checked", false).each(changed);
         }, 2000);
 
     var angleProportion = 360.0 / nodes.length;
@@ -131,16 +149,18 @@ function render() {
         };
     }
 
+
+
     function moveToFront() {
         this.parentNode.appendChild(this);
     }
 
     var arc2 = d3.svg.arc()
         .startAngle(function (d) {
-            return (d.x - (angleScale * nameToCount[d.name] * 0.45)) * (Math.PI / 180);
+            return (d.x - (Math.max(minSeperation, angleScale * nameToCount[d.name] * 0.45) - 0.2)) * (Math.PI / 180);
         })
         .endAngle(function (d) {
-            return (d.x + (angleScale * nameToCount[d.name] * 0.45)) * (Math.PI / 180);
+            return (d.x + (Math.max(minSeperation, angleScale * nameToCount[d.name] * 0.45) - 0.2)) * (Math.PI / 180);
         })
         .innerRadius(function (d) {
             return (innerRadius + 5);
@@ -161,9 +181,12 @@ function render() {
             return catagoricalColors(nameToClade[d.name]); // return ("#999");
         })
         .style('stroke', function (d) {
-            return ("#111");
+            return "#444"; // return ("#999");
         })
-        .attr("transform", "translate(" + outerRadius + "," + outerRadius + ")");
+        .attr("transform", "translate(" + outerRadius + "," + outerRadius + ")")
+        .on('mouseover', tip.show)
+        .on('mouseout', tip.hide);
+
 
 }
 
@@ -206,7 +229,7 @@ function setRadius(d, y0, k) {
 
 // Set the color of each node by recursively inheriting.
 function setColor(d) {
-    d.color = color.domain().indexOf(d.name) >= 0 ? color(d.name) : d.parent ? d.parent.color : null;
+    d.color = catagoricalColors.domain().indexOf(d.name) >= 0 ? catagoricalColors(d.name) : d.parent ? d.parent.color : null;
     if (d.children) d.children.forEach(setColor);
 }
 
