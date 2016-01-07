@@ -107,7 +107,7 @@ d3.tsv(per_base_histogram_data, function (error, data) {
             .enter().append('rect')
             .attr('class', 'target')
             .attr('x', function (d) {
-                return xEvents(+d.position);
+                return xEvents(+d.position - (cut_site_offset - 19));
             })
             .attr('y', 0)
             .attr('width', function (d) {
@@ -122,15 +122,16 @@ d3.tsv(per_base_histogram_data, function (error, data) {
             .enter().append('rect')
             .attr('class', 'cutsites')
             .attr('x', function (d) {
-                return xEvents(+d.cutPos);
+                return xEvents((+d.cutPos + 3) - (cut_site_offset - 19));
             })
             .attr('y', 0)
             .attr('width', function (d) {
-                return xEvents(3) - xEvents(0)
+                return xEvents(4) - xEvents(0)
             })
             .attr('height', height)
             .attr("fill-opacity", .4)
             .attr("fill", "gray")
+	    .attr("stroke", "#888888")
     });
 
     var mutbox = svg.selectAll(".bar")
@@ -282,7 +283,7 @@ function redrawHistogram() {
     if (xScaleIsLog) {
         svgHeatRight.selectAll(".tick")
             .each(function (d, i) {
-                if (d == 0 || this.textContent == "") {
+                if (d == 0 || this.textContent == "" || !(Math.log10(+this.textContent) % 1 === 0)) {
                     this.remove();
                 } else {
                     var valueToConvert = +this.textContent
