@@ -289,6 +289,13 @@ function redrawHistogram() {
                     this.children[1].textContent = "10" + formatPower(Math.log10(valueToConvert))
                 }
             });
+    } else {
+        svgHeatRight.selectAll(".tick")
+            .each(function (d, i) {
+                if (i % 2 == 0) {
+                    this.remove();
+                }
+            });
     }
 
     //Add the text legend
@@ -297,7 +304,11 @@ function redrawHistogram() {
             return 15;
         })
         .attr("y", function (d) {
-            return topHeight - 60;
+            if (xScaleIsLog) {
+                return topHeight - 50;
+            } else {
+                return topHeight - 90;
+            }
         })
         .attr("text-anchor", "left")
         .style("font-size", "12px")
