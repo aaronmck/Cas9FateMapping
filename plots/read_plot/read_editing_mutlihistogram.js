@@ -102,12 +102,16 @@ d3.tsv(per_base_histogram_data, function (error, data) {
     // load in the cutsite data and draw that onto the plot -- this is nested to use the x and y axis object from above
     // ************************************************************************************************************
     d3.tsv(cut_site_file, function (error, data) {
+	var minCutSite = d3.min(data, function(d) {
+	    return +d.position
+	}) - 19;
+	
         svg.selectAll('.target')
             .data(data)
             .enter().append('rect')
             .attr('class', 'target')
             .attr('x', function (d) {
-                return xEvents(+d.position - (cut_site_offset - 19));
+                return xEvents(+d.position - minCutSite);
             })
             .attr('y', 0)
             .attr('width', function (d) {
@@ -122,7 +126,7 @@ d3.tsv(per_base_histogram_data, function (error, data) {
             .enter().append('rect')
             .attr('class', 'cutsites')
             .attr('x', function (d) {
-                return xEvents((+d.cutPos + 3) - (cut_site_offset - 19));
+                return xEvents((+d.cutPos + 4) - minCutSite);
             })
             .attr('y', 0)
             .attr('width', function (d) {
