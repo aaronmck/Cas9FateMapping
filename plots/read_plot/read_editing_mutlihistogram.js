@@ -26,7 +26,8 @@ var margin = {top: 0, right: 0, bottom: 5, left: 100},
 // 3) color for insertions
 // 3) color for mismatch? might be useful for TYR data
 //var heatmap_colors = ['#D8D8D8','#CE343F','#2E4D8E','#D49E35'];
-var heatmap_colors = ['#FFFFFF', '#CE343F', '#2E4D8E', '#D49E35'];
+//http://paletton.com/#uid=7000A0kwi++bu++hX++++rd++kX
+var heatmap_colors = ['#FFFFFF', '#FF0000', '#1A63FF', '#00FF00'];
 
 // the labels for types of events we support in the input data
 var mutation_values = ["reference", "insertion", "deletion", "mismatch"];
@@ -37,6 +38,12 @@ var xScaleIsLog = true
 
 occurance_data = ""
 
+// from http://bl.ocks.org/mbostock/7621155
+var superscript = "⁰¹²³⁴⁵⁶⁷⁸⁹",
+    formatPower = function(d, i) {
+
+        return (d + "").split("").map(function(c) { return superscript[c]; }).join("");
+    };
 
 // ************************************************************************************************************
 // setup the SVG panels
@@ -201,20 +208,18 @@ function redrawHistogram() {
         .tickFormat(formatter)
         .outerTickSize(0);
 
-
+    // are we using linear or log scales? setup the axis either way
+    // --------------------------------------------------------------------------------
     prescale = d3.scale.linear().domain([0, d3.max(occurance_data, function (d) {
         return +d.rawCount
     })]).range([0, 150]).nice();
 
     var xAxis = d3.svg.axis().scale(prescale).orient("top")
     if (xScaleIsLog) {
-        prescale = d3.scale.log().domain([1, d3.max(occurance_data, function (d) {
-            return +d.rawCount
-        })]).range([0, 150]).nice();
-        xAxis = d3.svg.axis().scale(prescale).orient("top").ticks(2);
-
-    } else {
-
+        var maxVal = d3.max(occurance_data, function (d) {return +d.rawCount})
+        var minVal = d3.min(occurance_data, function (d) {return +d.rawCount})
+        prescale = d3.scale.log().domain([minVal, maxVal]).range([0, 150]).nice();
+        xAxis = d3.svg.axis().scale(prescale).orient("top").tickSize(6); // .tickFormat(function(d) { return "10" + formatPower(Math.round(Math.log(d))); });
     }
 
 
@@ -235,7 +240,8 @@ function redrawHistogram() {
     var gridHeight = parseInt(heat_height / readCount);
 
     // both the fill and stroke colors for the WT and non-WT HMIDs
-    var wt_colors = ['#000000', '#3EAF2C', '#555555', '#117202', '#333333'];
+    //var wt_colors = ['#000000', '#3EAF2C', '#555555', '#117202', '#333333'];
+    var wt_colors = ['#000000', '#00FF00', '#555555', '#117202', '#333333'];
 
 
     mutbox2.selectAll(".bar")
@@ -272,12 +278,18 @@ function redrawHistogram() {
         .attr("transform", "rotate(90)")
         .attr("y", 1)
 
-    svgHeatRight.selectAll(".tick")
-        .each(function (d) {
-            if (d === 0) {
-                this.remove();
-            }
-        });
+    // this is really hacky, but I can't seem to programmaticly slim down the number of ticks on the x axis in log mode, so do it by hand
+    if (xScaleIsLog) {
+        svgHeatRight.selectAll(".tick")
+            .each(function (d, i) {
+                if (d == 0 || this.textContent == "") {
+                    this.remove();
+                } else {
+                    var valueToConvert = +this.textContent
+                    this.children[1].textContent = "10" + formatPower(Math.log10(valueToConvert))
+                }
+            });
+    }
 
     //Add the text legend
     svgHeatRight.append("text")
@@ -285,11 +297,11 @@ function redrawHistogram() {
             return 15;
         })
         .attr("y", function (d) {
-            return topHeight - 90;
+            return topHeight - 60;
         })
         .attr("text-anchor", "left")
         .style("font-size", "12px")
-        .text("HMID percentage of total");
+        .text("Number of HMIDs");
 
 }
 
