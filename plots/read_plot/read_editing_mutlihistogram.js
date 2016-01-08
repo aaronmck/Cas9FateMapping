@@ -257,7 +257,7 @@ function redrawHistogram() {
             return 0;
         })
         .attr("width", function (d) {
-            return prescale(+d.rawCount);
+            return Math.max(0.5,prescale(+d.rawCount));
         })
         .attr("y", function (d) {
             return topHeight + yScale(+d.array);
@@ -340,9 +340,9 @@ d3.tsv(top_read_melted_to_base, function (error, data) {
 
     var dmt = xScale.domain().length;
     var gridWidth = parseInt(width / dmt);
-    var readCount = parseInt(d3.max(data.map(function (d) {
-        return d.array;
-    })));
+    var readCount = parseInt(d3.max(data, function (d) {
+        return +d.array;
+    }));
     var gridHeight = parseInt(heat_height / readCount);
     var gridPadding = 0.1
     var gridOffset = parseInt(gridWidth + (gridWidth / 2));
@@ -359,10 +359,10 @@ d3.tsv(top_read_melted_to_base, function (error, data) {
 
 
     var rectangle = svgHeat.append("rect")
-        .attr("x", xScale(min))
-        .attr("y", 0)
+        .attr("x", xScale(0))
+        .attr("y", yScale(0))
         .attr("width", xScale(max) - xScale(min))
-        .attr("height", heat_height)
+        .attr("height", yScale(heat_height))
         .attr("fill", "#BBB");
 
     var heatMap = svgHeat.selectAll(".heatmap")
