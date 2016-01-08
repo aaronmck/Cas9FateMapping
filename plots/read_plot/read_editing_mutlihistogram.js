@@ -19,6 +19,7 @@ var margin = {top: 0, right: 0, bottom: 5, left: 100},
     width = left_panel_total_width,
     height = topHeight - margin.top - margin.bottom,
     heat_height = 400;
+var minReadHeight = 10
 
 // colors we use for events throughout the plots
 // 1) color for unedited
@@ -204,11 +205,13 @@ function changeHistogram() {
 // histogram on the right
 // ************************************************************************************************************
 function redrawHistogram() {
-
+    var numReads = occurance_data.length
+    var plotHeight = Math.min(numReads * minReadHeight,heat_height)
+    
     formatter = d3.format("2");
     var yScale = d3.scale.ordinal().domain(occurance_data.map(function (d) {
         return d.array;
-    })).rangeRoundBands([0, heat_height]);
+    })).rangeRoundBands([0, plotHeight]);
     var yAxis = d3.svg.axis().scale(yScale).orient("left").ticks(4)
         .tickFormat(formatter)
         .outerTickSize(0);
@@ -239,10 +242,7 @@ function redrawHistogram() {
             return "gray";
         });
 
-    var readCount = parseInt(d3.max(occurance_data.map(function (d) {
-        return +d.array;
-    })));
-    var gridHeight = parseInt(heat_height / readCount);
+    var gridHeight = parseInt(plotHeight / numReads);
 
     // both the fill and stroke colors for the WT and non-WT HMIDs
     //var wt_colors = ['#000000', '#3EAF2C', '#555555', '#117202', '#333333'];
@@ -330,40 +330,44 @@ d3.tsv(occurance_file, function (error, data) {
 // read plots -- add a block for each of the high frequency reads we observe
 // ************************************************************************************************************
 d3.tsv(top_read_melted_to_base, function (error, data) {
-    // the scales and axis for the heatmap data
-    var yScale = d3.scale.ordinal().domain(data.map(function (d) {
-        return +d.array;
-    })).rangeRoundBands([0, heat_height]);
     var xScale = d3.scale.ordinal().domain(data.map(function (d) {
         return +d.position;
     })).rangeRoundBands([margin.left, left_panel_total_width + margin.left]);
-
     var dmt = xScale.domain().length;
+    
     var gridWidth = parseInt(width / dmt);
     var readCount = parseInt(d3.max(data, function (d) {
         return +d.array;
-    }));
-    var gridHeight = parseInt(heat_height / readCount);
+    })) + 1;
     var gridPadding = 0.1
+    var readBarHeight = Math.min(heat_height / readCount,minReadHeight);
     var gridOffset = parseInt(gridWidth + (gridWidth / 2));
+    var readPlotHeight = Math.min(heat_height,readBarHeight  * readCount);
 
     var max = d3.entries(data).sort(function (a, b) {
-            return d3.descending(+a.value.position, +b.value.position);
-        }
-    )[0].value.position;
-
+        return d3.descending(+a.value.position, +b.value.position);
+    })[0].value.position;
+    
     var min = d3.entries(data).sort(function (a, b) {
-            return d3.ascending(+a.value.position, +b.value.position);
-        }
-    )[0].value.position;
+        return d3.ascending(+a.value.position, +b.value.position);
+    })[0].value.position;
+
+    
+    // the scales and axis for the heatmap data
+    var yScale = d3.scale.ordinal().domain(data.map(function (d) {
+        return +d.array;
+    })).rangeRoundBands([0, readPlotHeight]);
+    
+    
+    
 
 
     var rectangle = svgHeat.append("rect")
         .attr("x", xScale(0))
         .attr("y", yScale(0))
         .attr("width", xScale(max) - xScale(min))
-        .attr("height", yScale(heat_height))
-        .attr("fill", "#BBB");
+        .attr("height", yScale(readPlotHeight))
+        .attr("fill", "#888");
 
     var heatMap = svgHeat.selectAll(".heatmap")
         .data(data)
@@ -372,13 +376,13 @@ d3.tsv(top_read_melted_to_base, function (error, data) {
             return xScale(+d.position)
         })
         .attr("y", function (d, i) {
-            return yScale(+d.array) + (gridHeight * 0.1)
+            return yScale(+d.array) 
         })
         .attr("width", function (d) {
             return gridWidth;
         })
         .attr("height", function (d) {
-            return gridHeight * 0.8
+            return readBarHeight * 0.8
         })
         .style("fill", function (d) {
             return heatmap_colors[+d.event];
