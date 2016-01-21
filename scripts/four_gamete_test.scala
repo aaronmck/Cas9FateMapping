@@ -5,6 +5,7 @@
 import scala.io._
 import java.io._
 import scala.collection.mutable._
+import scala.collection.immutable.ListMap
 
 
 // --------------------------------------------------
@@ -12,13 +13,15 @@ import scala.collection.mutable._
 val lines = Source.fromFile(args(0)).getLines()
 val header = lines.next()
 
-
 val output = new PrintWriter(args(1))
+val output2 = new PrintWriter(args(2))
 
 // --------------------------------------------------
 // find the event columns -- make a mapping
 // from the target number to the column index, assuming they're
 // labeled targetX where is X is 1,2,3,4....
+// --------------------------------------------------
+
 val targetToIndex = new LinkedHashMap[Int,Int]()
 header.split("\t").zipWithIndex.foreach{case(tk,index) => {
   if (tk contains "target") {
@@ -28,100 +31,103 @@ header.split("\t").zipWithIndex.foreach{case(tk,index) => {
   }
 }}
 
+// --------------------------------------------------
 // load up the event columns into arrays of numeric events
 // --------------------------------------------------
 val eventToNumber = new HashMap[String,Int]()
+val eventToCount = new HashMap[String,Int]()
 val numberToEvent = new HashMap[Int,String]()
 
 eventToNumber("NONE") = 0
 eventToNumber("UNKNOWN") = 0
+numberToEvent(0) = "NONE"
+
 var nextIndex = 1
 
+// store a mapping from the column to a list of event numbers
 val columnToEventsArray = new HashMap[Int,ArrayBuilder[Int]]()
 targetToIndex.foreach{case(target,column) => columnToEventsArray(target) = ArrayBuilder.make[Int]}
 
 var linesProcessed = 0
 
+// -------------------------------------------------------------------
+//  for each line, for each target, add it to the columnToEventsArray
+// -------------------------------------------------------------------
 lines.foreach{line => {
   linesProcessed += 1
   val sp = line.split("\t")
   targetToIndex.foreach{case(target,index) => {
     val event = sp(index)
 
-    if (event != "NONE" && event != "UNKNOWN") {
+    if (event != "UNKNOWN") { // event != "NONE" && 
       if (!(eventToNumber contains event)) {
         eventToNumber(event) = nextIndex
         numberToEvent(nextIndex) = event
         nextIndex += 1
       }
+      eventToCount(event) = eventToCount.getOrElse(event,0) + 1
       columnToEventsArray(target) = columnToEventsArray.getOrElse(target,ArrayBuilder.make[Int]) += eventToNumber(event)
     }
   }}
 }}
 
+output2.write("event\tcount\n")
+var lMap = ListMap(eventToCount.toSeq.sortBy(_._2):_*)
+lMap.foreach{case(event,count) => output2.write(event + "\t" + count + "\n")}
+output2.close()
+
 println("Lines processed " + linesProcessed)
 
-case class FourGameteResult(evt1: String, evt2: String, zeroOne: Int = 0, oneZero: Int = 0, oneOne: Int = 0) {
 
-  def addZeroZero(): FourGameteResult = FourGameteResult(evt1, evt2, zeroOne, oneZero, oneOne)
-  def addZeroOne():  FourGameteResult = FourGameteResult(evt1, evt2, zeroOne + 1, oneZero, oneOne)
-  def addOneZero():  FourGameteResult = FourGameteResult(evt1, evt2, zeroOne, oneZero + 1, oneOne)
-  def addOneOne():   FourGameteResult = FourGameteResult(evt1, evt2, zeroOne, oneZero, oneOne + 1)
-
-  def addEvent(event1: Int, event2: Int) : FourGameteResult = {
-    if ((event1 == 0) && (event2 == 0))
-      return addZeroZero()
-    if ((event1 == 0) && !(event2 == 0))
-      return addZeroOne()
-    if (!(event1 == 0) && (event2 == 0))
-      return addOneZero()
-    if (!(event1 == 0) && !(event2 == 0))
-      return addOneOne()
-    println(event1 + "\t" + event2)
-    return addZeroZero()
-  }
-
-  def zeroProp(total:Int): Double = (zeroOne.toDouble + oneOne.toDouble) / total.toDouble
-  def oneProp(total:Int): Double = (oneZero.toDouble + oneOne.toDouble) / total.toDouble
-  def gametes(total:Int): Double = (zeroOne.toDouble + oneZero.toDouble + oneOne.toDouble) / total.toDouble
-
-}
-
-
-val minCount = 20
-
-output.write("column1\tcolumn2\tevent1\tevent2\tevent1Prop\tevent2Prop\t01\t10\t11\tgameteCount\n")
+output.write("event1\tevent2\t10\t01\t11\tfourGameteResult\n")
 
 // --------------------------------------------------
 // now for each event-pair across two columns, determine if two events
 // satisfy the 4-gamete test
-// output.write("column1\tcolumn2\tevent1\tevent2\tevent1Prop\tevent2Prop\t00\t01\t10\t11\tgameteCount\n")
 val run = new HashMap[String,Boolean]()
 
 // loop over one column
+val processedPairs = new HashMap[Int,Int]()
+var totalCount = 0
+
 columnToEventsArray.foreach{case(index,events) => {
-  val counts = new HashMap[Int,Int]()
-  events.result.foreach{case(evt) => counts(evt) = counts.getOrElse(evt,0) + 1}
+  println(index + "\t" + events.result.size)
 
-  // loop another column, checking that we haven
-  columnToEventsArray.foreach{case(index2,events2) => {
-    if (index != index2 && !(run contains (index + "," + index2)) && !(run contains (index2 + "," + index))) {
-      println(index + "," + index2)
+  // add combinations of events
+  columnToEventsArray.filter(ind => ind != index).foreach{case(index2,events2) => {
 
-      val fourEvents = new HashMap[String,FourGameteResult]()
-      events.result.zip(events2.result).foreach{case(evt1,evt2) => {
-        var tag = evt1 + "," + evt2
-        if (evt1 > evt2)
-          tag = evt1 + "," + evt2
+    val counts = new HashMap[Int,HashMap[Int,Int]]()
 
-        fourEvents(tag) = fourEvents.getOrElse(tag,FourGameteResult(numberToEvent(evt1),numberToEvent(evt2))).addEvent(evt1,evt2)
+    if (index > index2) {
+      events.result.zip(events2.result).foreach{case(evt1Int,evt2Int) => {
+        if (!(counts contains evt1Int))
+          counts(evt1Int) = new HashMap[Int,Int]()
+        counts(evt1Int)(evt2Int) = counts(evt1Int).getOrElse(evt2Int,0) + 1
+
+        if (!(counts contains evt2Int))
+          counts(evt2Int) = new HashMap[Int,Int]()
+        counts(evt2Int)(evt1Int) = counts(evt2Int).getOrElse(evt1Int,0) + 1
       }}
-      fourEvents.foreach{case(tg,fgr) => output.write(index + "\t" + index2 + "\t" + fgr.evt1 + "\t" + fgr.evt2 + "\t" + fgr.zeroProp(events2.result.length) + "\t" + fgr.oneProp(events2.result.length) +
-        "\t" + fgr.zeroOne + "\t" + fgr.oneZero + "\t" + fgr.oneOne + "\t" + fgr.gametes(events2.result.length) + "\n")}
 
-      run(index + "," + index2) = true
+
+      // now for each key, find out if there's a combination of both
+      counts.foreach{case(e1Int,evt2Count) => {
+        counts.foreach{case(e2Int,evt1Count) => {
+          if (e1Int != 0 && e2Int != 0 && e1Int != e2Int && e1Int < e2Int) {
+            val zeroOne = evt1Count.getOrElse(0,0)
+            val oneZero = evt2Count.getOrElse(0,0)
+            val oneOne  = evt1Count.getOrElse(e1Int,0)
+            totalCount += 1
+            val fourGamete = zeroOne > 0 && oneZero > 0 && oneOne > 0
+            if (fourGamete) {
+              output.write(numberToEvent(e1Int) + "\t" + numberToEvent(e2Int) +
+                "\t" + oneZero + "\t" + zeroOne + "\t" + oneOne + "\t" + fourGamete + "\n")
+            }
+          }
+        }}
+      }}
     }
   }}
 }}
-
+println("total tried " + totalCount)
 output.close()

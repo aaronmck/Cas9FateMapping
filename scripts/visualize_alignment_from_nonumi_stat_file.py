@@ -35,7 +35,7 @@ def findReadAndReferenceString(inputFile, targetRead):
         if line.startswith(">"):
             if not inReference:
                 # print readName
-                if readName == targetRead:
+                if readName.startswith(targetRead):
                     return ((reference,readString))
                 reference  = ""
                 referenceName = ""
@@ -45,7 +45,7 @@ def findReadAndReferenceString(inputFile, targetRead):
             else:
                 inReference = False
                 readName = line.lstrip(">").replace(" ","_")
-                print readName
+                # print readName
         else:
             if inReference:
                 reference += line 

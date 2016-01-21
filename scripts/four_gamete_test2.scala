@@ -68,8 +68,6 @@ val output = new PrintWriter(args(1))
 output.write("event1\tevent2\tevent1Prop\tevent2Prop\t01\t10\t11\n")
 eventToEventCount.foreach{case(evt1,counts) => {
     counts.foreach{case(evt2,count) => {
-      //println(eventCounts contains evt1)
-      //println(eventCounts contains evt2)
       val evt1Prop = eventCounts(evt1).toDouble / (linesProcessed * targetToIndex.size)
       val evt2Prop = eventCounts(evt2).toDouble / (linesProcessed * targetToIndex.size)
       val oneToTwo = eventToEventCount(evt1)(evt2)

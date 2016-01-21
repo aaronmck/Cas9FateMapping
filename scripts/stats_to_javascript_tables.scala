@@ -151,12 +151,12 @@ allEventsF.close()
 
 
 occurances.write("array\tposition\tevent\n")
-readCounts.write("event\tarray\tcount\tWT\n")
+readCounts.write("event\tarray\tproportion\trawCount\tWT\n")
 
 topEvents.zipWithIndex.foreach{case((str,count),index) => {
   val isAllWT = eventToCigar(str).split("_").map{sat => if (sat == "NONE") 0 else 1}.sum == 0
   val outWT = if (isAllWT) 1 else 2
-  readCounts.write(eventToCigar(str) + "\t" + index + "\t" + toPct(count) + "\t" + outWT + "\n")
+  readCounts.write(eventToCigar(str) + "\t" + index + "\t" + toPct(count) + "\t" + count + "\t" + outWT + "\n")
   str.zipWithIndex.foreach{case(evt,subIndex) =>
     occurances.write(index + "\t" + subIndex + "\t" + evt + "\n")
   }

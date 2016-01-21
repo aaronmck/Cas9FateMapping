@@ -55,7 +55,10 @@ print cutString
 
 cutString = "only one read, see merged above"
 refIndex = 0
+
 if stats_line[stats_header.index("readRRef")] != "merged":
+    refLength = len(stats_line[stats_header.index("readRRef")])
+
     cutString = ""
     for i in range(0,refLength):
         if stats_line[stats_header.index("readRRef")][i] != '-':
