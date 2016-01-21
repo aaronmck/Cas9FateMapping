@@ -152,6 +152,27 @@ class AlignmentManagerTest extends FlatSpec with Matchers {
     combined._2(1) should be ("WT_2D+14")
   }
 
+  "A MAFFT" should "handle two reads with a shared, complex event correctly" in {
+    val ref1 =     "AAATAAAAAAAATAAAAA"
+    val readFwd1 = "AAAT-T-AAAAATAAAAA"
+
+    //              012345678901234567
+    val ref2 =     "AAATAAAAAAAATAAAAA"
+    val readFwd2 = "AAAT-T-AAAAATAAAAA"
+
+    val cutSites = CutSites.fromIntervals(Array[Tuple3[Int,Int,Int]]((2,5,8)))
+    val testCalls1 = AlignmentManager.callEdits(ref1,readFwd1,1)
+    val testCalls2 = AlignmentManager.callEdits(ref2,readFwd2,1)
+
+    testCalls1.length should be (5)
+    testCalls2.length should be (5)
+
+    val combined = AlignmentManager.editsToCutSiteCalls(List[List[Alignment]](testCalls1,testCalls2),cutSites)
+    combined._2.size should be (1)
+    combined._2(0) should be ("1D+4&1D+6")
+  }
+
+
   "A MAFFT" should "merge an a collision correctly" in {
     val ref1 =     "AAATAAAAAAAATAAAAA"
     val readFwd1 = "AAAAT-AAAAAAAT--AA"

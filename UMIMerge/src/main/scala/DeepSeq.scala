@@ -52,8 +52,8 @@ object DeepSeq extends App {
   val NOTAREALFILE = new File(NOTAREALFILENAME)
 
   // parse the command line arguments
-  val parser = new scopt.OptionParser[DeepConfig]("DeepConfig") {
-    head("DeepConfig", "1.0")
+  val parser = new scopt.OptionParser[DeepConfig]("DeepSeq") {
+    head("DeepSeq", "1.0")
 
     // *********************************** Inputs *******************************************************
     opt[File]("inputUnmerged") required() valueName ("<file>") action { (x, c) => c.copy(inputFileUnmerged = x) } text ("unmerged reads")
@@ -64,7 +64,7 @@ object DeepSeq extends App {
     opt[String]("sample") required() action { (x, c) => c.copy(samplename = x) } text ("the sample name of this run")
 
     // some general command-line setup stuff
-    note("process align reads\n")
+    note("process aligned reads from non-UMI samples\n")
     help("help") text ("prints the usage information you see here")
   }
 

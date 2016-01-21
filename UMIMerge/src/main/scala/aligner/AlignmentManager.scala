@@ -235,11 +235,14 @@ object AlignmentManager {
       edits.foreach { editList =>
         editList.foreach { edit => {
           if ((edit.cigarCharacter == "D" && overlap(start, end, edit.refPos, edit.refPos + edit.refBase.length)) ||
-            edit.cigarCharacter == "I" && overlap(start, end, edit.refPos, edit.refPos))
+            edit.cigarCharacter == "I" && overlap(start, end, edit.refPos, edit.refPos)) {
             // check that we haven't already added this exact edit to the list -- this will happen in paired reads where the edits agree
-            if (!(candidates contains edit))
+            if (!(candidates contains edit)) {
               candidates :+= edit
-          else if (edit.cigarCharacter == "M" && span(edit.refPos, edit.refPos + edit.refBase.length, start, end)) {
+            } else {
+              println("ALREADY CONTAINS " + edit.prettyPrint)
+            }
+          } else if (edit.cigarCharacter == "M" && span(edit.refPos, edit.refPos + edit.refBase.length, start, end)) {
             matchOverlap = true
             if (candidates.size > 0)
               println(candidates(0).toEditString + " " + edit.toEditString + " " + edit.refPos + " " + (edit.refPos + edit.refBase.length) + " " +  start + " " +  end)
