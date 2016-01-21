@@ -40,25 +40,25 @@ import java.util.zip._
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
  *
  */
-case class Config(inputFileReads1: File = new File(Main.NOTAREALFILENAME),
-                  inputFileReads2: File = new File(Main.NOTAREALFILENAME),
-                  outputFastq1: File = new File(Main.NOTAREALFILENAME),
-                  outputFastq2: File = new File(Main.NOTAREALFILENAME),
-                  outputStats: File = new File(Main.NOTAREALFILENAME),
-                  outputUMIStats: File = new File(Main.NOTAREALFILENAME),
-                  outputAlignments: File = new File(Main.NOTAREALFILENAME),
-                  cutSites: File = new File(Main.NOTAREALFILENAME),
+case class Config(inputFileReads1: File = new File(UMIProcessing.NOTAREALFILENAME),
+                  inputFileReads2: File = new File(UMIProcessing.NOTAREALFILENAME),
+                  outputFastq1: File = new File(UMIProcessing.NOTAREALFILENAME),
+                  outputFastq2: File = new File(UMIProcessing.NOTAREALFILENAME),
+                  outputStats: File = new File(UMIProcessing.NOTAREALFILENAME),
+                  outputUMIStats: File = new File(UMIProcessing.NOTAREALFILENAME),
+                  outputAlignments: File = new File(UMIProcessing.NOTAREALFILENAME),
+                  cutSites: File = new File(UMIProcessing.NOTAREALFILENAME),
                   umiLength: Int = 1,
                   umiStartPos: Int = 0,
-                  primersEachEnd: File = new File(Main.NOTAREALFILENAME),
-                  reference: File = new File(Main.NOTAREALFILENAME),
+                  primersEachEnd: File = new File(UMIProcessing.NOTAREALFILENAME),
+                  reference: File = new File(UMIProcessing.NOTAREALFILENAME),
                   samplename: String = "TEST",
                   minimumUMIReads: Int = 5,
                   minimumSurvivingUMIReads: Int = 2)
 
 
 
-object Main extends App {
+object UMIProcessing extends App {
   val NOTAREALFILENAME = "/0192348102jr10234712930h8j19p0hjf129-348h512935"
   // please don't make a file with this name
   val NOTAREALFILE = new File(NOTAREALFILENAME)
