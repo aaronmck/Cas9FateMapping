@@ -1,0 +1,54 @@
+import scala.io._
+import java.io._
+
+// a list of directories to process
+val directories = Array[File](
+  new File("2015_05_10_Rerun_HEK_analysis/"),
+  new File("2015_07_08_HEK4_exp3_redo/"),
+  new File("2015_07_14_Target_3_analysis/"),
+  new File("2015_07_26_barcoded_target1/"),
+  new File("2015_10_06_Zebrafish_Initial_MiSeq/"),
+  new File("2015_10_18_Full_TYR_sequencing/"),
+  new File("2015_10_22_Cell_Culture_Lineage/"),
+  new File("2015_10_31_OT_Deep_Sequencing/"),
+  new File("2015_11_07_Dilution_Embryos/"),
+  new File("2015_11_23_Deep_Sequence_Dilution/"),
+  new File("2015_12_13_Adult_target1/"),
+  new File("2015_12_18_Adult_target/"),
+  new File("2015_12_29_V1_V2/"))
+
+def recursiveListFiles(f: File): Array[File] = {
+  val these = f.listFiles
+  these ++ these.filter(_.isDirectory).flatMap(recursiveListFiles)
+}
+val startPath = "/net/shendure/vol10/projects/CRISPR.lineage/nobackup/"
+
+directories.foreach{ dir => {
+  val fullDataDir = new File(startPath + File.separator + dir + File.separator + "data" + File.separator + "pipeline_output" + File.separator)
+  println(fullDataDir.getAbsolutePath)
+
+  recursiveListFiles(fullDataDir).foreach{fl => {
+    if (fl.getAbsolutePath endsWith ".stats") {
+      try {
+        val inputFl = Source.fromFile(fl).getLines()
+        val header = inputFl.next.split("\t")
+        var valid = true
+        var len = 0
+        inputFl.foreach{line =>
+          if (line.split("\t").length == header.length) {
+            valid = valid & true
+            len += 1
+          } else {
+            valid = false
+            len += 1
+          }
+        }
+
+        println(fl + "\t" + valid + "\t" + len)
+      } catch {
+        case e: Exception => println("Unable to validate input file " + fl)
+      }
+    }
+  }}
+  
+}}
