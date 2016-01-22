@@ -3,6 +3,7 @@ package main.scala
 import java.util
 
 import _root_.utils.{CutSites}
+import main.scala.stats.StatsOutput
 import utils.Utils
 
 import scala.collection.mutable
@@ -110,7 +111,8 @@ object UMIProcessing extends App {
     // our output files
     val outputFastq1File = new PrintWriter(config.outputFastq1)
     val outputFastq2File = new PrintWriter(config.outputFastq2)
-    val outputStatsFile = new PrintWriter(config.outputStats)
+    val cutsSiteObj = CutSites.fromFile(config.cutSites, 3)
+    val outputStatsFile = new StatsOutput(config.outputStats,cutsSiteObj.size)
 
     // get the reference as a string
     var referenceString = ""
@@ -233,18 +235,14 @@ object UMIProcessing extends App {
     println("UMIs kept as is:" + justRightUMI)
 
 
-    outputStatsFile.write("UMI\tkeptPCT\tfail.reason\tinitF\tfilteredF\tfinalF\tinitR\tfilteredR\tfinalR\tfwdBasesMatching\trevBasesMatching\t")
-
     var passingUMI = 0
     var totalWithUMI = 0
 
-    println("\nProcessing " + umiReadsFWDReplacements.size + " forward read UMIs and " + umiReadsRVSReplacements.size + " reverse read UMIs")
     var index = 0
 
-    val cutsSiteObj = CutSites.fromFile(config.cutSites, 3)
-    outputStatsFile.write(cutsSiteObj.windows.zipWithIndex.map { case (wds, index) => "target" + (index + 1) }.mkString("\t") + "\teventString1\teventString2\treadFRef\treadF\treadRRef\treadR\n")
+
     // --------------------------------------------------------------------------------
-    // for each UMI -- process its individual reads
+    // for each UMI -- process its individual reads that couldn't be merged
     // --------------------------------------------------------------------------------
     umiReadsFWDReplacements.foreach { case (umi, reads) => {
       //println(umi)
@@ -252,7 +250,7 @@ object UMIProcessing extends App {
       val forwardReads = umiReadsFWDReplacements(umi)
 
       if (forwardReads.length > config.minimumUMIReads && reverseReads.length > config.minimumUMIReads) {
-        val res = OutputManager.mergeTogether(umi,
+        val res = UMIMerger.mergeTogether(umi,
           forwardReads,
           reverseReads,
           umiReadsFWDReplacementsCounts(umi),

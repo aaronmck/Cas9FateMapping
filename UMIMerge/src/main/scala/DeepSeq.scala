@@ -4,11 +4,13 @@ import java.util
 
 import _root_.aligner.{Alignment, AlignmentManager}
 import _root_.utils.{CutSites}
+import main.scala.stats.{StatsContainer, StatsOutput}
 import main.scala.utils.{RefReadPair, ReadPair, UnmergedReadParser, ReadPairParser}
 
 import scala.io._
 import java.io._
 import scala.collection.mutable._
+import scala.main.SequencingRead
 
 /**
  * created by aaronmck on 2/13/14
@@ -80,16 +82,14 @@ object DeepSeq extends App {
 
 
   /**
-   * perform analysis of the deep sequenced reads
+   * Process the merged and paired reads into the output stats file
    * @param config our config object
+   *
    */
   def alignedReads(config: DeepConfig): Unit = {
     val cutsSiteObj = CutSites.fromFile(config.cutSites, 3)
 
-    val outputStatsFile = new PrintWriter(config.outputStats)
-    outputStatsFile.write("readName\ttype\tmergedReadLen\tread1len\tread2len\tmatchRate1\talignedBases1\t")
-    outputStatsFile.write("matchRate2\talignedBases2\thasForwardPrimer\thasReversePrimer\tkeep\t")
-    outputStatsFile.write((0 until cutsSiteObj.windows.size).map { i => "target" + (i + 1) }.mkString("\t") + "\n")
+    val outputStatsFile = new StatsOutput(config.outputStats,cutsSiteObj.size)
 
     val primers = Source.fromFile(config.primersEachEnd.getAbsolutePath).getLines().map { line => line }.toList
     if (primers.length != 2)
@@ -124,33 +124,42 @@ object DeepSeq extends App {
     outputStatsFile.close()
   }
 
-
+  /**
+   * cycle through the merged reads, creating alignments, and dumping information out to the stats file
+   * @param cutsSiteObj the cut sites
+   * @param outputStatsFile the stats file we're dumping output to
+   * @param mergedRead the merged read - aligned read and the matching reference string
+   * @param primers the primers to look for on each end of the fragment
+   */
   def printMergedRead(cutsSiteObj: CutSites,
-                      outputStatsFile: PrintWriter,
-                      readPair: RefReadPair,
+                      outputStatsFile: StatsOutput,
+                      mergedRead: RefReadPair,
                       primers: List[String]): Unit = {
 
-    val containsFwdPrimer = readPair.read.bases.filter(bs => bs != '-').mkString("") contains primers(0)
-    val containsRevPrimer = readPair.read.bases.filter(bs => bs != '-').mkString("") contains primers(1)
+    val containsFwdPrimer = mergedRead.read.bases.filter(bs => bs != '-').mkString("") contains primers(0)
+    val containsRevPrimer = mergedRead.read.bases.filter(bs => bs != '-').mkString("") contains primers(1)
 
-    val baseLen = readPair.read.bases.map { case (ch) => if (ch == '-') 0 else 1 }.sum
+    val baseLen = mergedRead.read.bases.map { case (ch) => if (ch == '-') 0 else 1 }.sum
 
-    val events = AlignmentManager.callEdits(readPair.reference.bases, readPair.read.bases, 10, false)
-    val combined  = AlignmentManager.editsToCutSiteCalls(List[List[Alignment]](events), cutsSiteObj, false)
-    val matchRate = AlignmentManager.percentMatch(readPair.reference.bases, readPair.read.bases)
+    val callEvents = AlignmentManager.cutSiteEvent(mergedRead, cutsSiteObj)
 
-    val combinedEvents = combined._2.mkString("\t")
-    val pass = if (containsFwdPrimer && containsRevPrimer && matchRate._1 > .90 && matchRate._2 > 50 && !(combinedEvents contains "WT_")) "PASS" else "FAIL"
+    val pass = (containsFwdPrimer && containsRevPrimer && callEvents.matchingRate > .90 && callEvents.matchingBaseCount> 50 && !(callEvents.alignments.mkString("\t") contains "WT_"))
 
-    outputStatsFile.write(readPair.read.name.replace(' ', '_') + "\tmerged\t" + baseLen + "\t-1\t-1\t" +
-      matchRate._1 + "\t" + matchRate._2 + "\tNA\tNA\t" +
-      containsFwdPrimer + "\t" + containsRevPrimer +
-      "\t" + pass + "\t" + combined._2.mkString("\t") + "\n")
+    outputStatsFile.outputStatEntry(StatsContainer(mergedRead.read.name, pass, containsFwdPrimer, containsRevPrimer,
+      false, true, baseLen, -1, 1, 1, callEvents.matchingRate, -1.0, callEvents.matchingBaseCount, -1,
+      callEvents.alignments, callEvents.basesOverTargets))
+
   }
 
-
+  /**
+   *
+   * @param cutsSiteObj cut sites in our target design
+   * @param outputStatsFile the stats output object
+   * @param readPairs the read pairs
+   * @param primers the primers we expect on each side of the read
+   */
   def printPairedRead(cutsSiteObj: CutSites,
-                      outputStatsFile: PrintWriter,
+                      outputStatsFile: StatsOutput,
                       readPairs: ReadPair,
                       primers: List[String]): Unit = {
 
@@ -160,23 +169,16 @@ object DeepSeq extends App {
     val base1Len = readPairs.pair1.read.bases.map { case (ch) => if (ch == '-') 0 else 1 }.sum
     val base2Len = readPairs.pair2.read.bases.map { case (ch) => if (ch == '-') 0 else 1 }.sum
 
-    val events1 = AlignmentManager.callEdits(readPairs.pair1.reference.bases, readPairs.pair1.read.bases, 10, false)
-    val events2 = AlignmentManager.callEdits(readPairs.pair2.reference.bases, readPairs.pair2.read.bases, 10, false)
+    val callEvents = AlignmentManager.cutSiteEventsPair(readPairs.pair1, readPairs.pair2, cutsSiteObj)
 
-    // Tuple2[Boolean, Array[String]]
-    val combined = AlignmentManager.editsToCutSiteCalls(List[List[Alignment]](events1, events2), cutsSiteObj, false)
-    val matchRate1 = AlignmentManager.percentMatch(readPairs.pair1.reference.bases, readPairs.pair1.read.bases)
-    val matchRate2 = AlignmentManager.percentMatch(readPairs.pair2.reference.bases, readPairs.pair2.read.bases)
+    val pass = containsFwdPrimer && containsRevPrimer &&
+      callEvents.matchingRate1 > .90 && callEvents.matchingRate2 > .90 &&
+      callEvents.matchingBaseCount1 > 50 && callEvents.matchingBaseCount2 > 50 &&
+      !(callEvents.alignments.mkString("") contains "WT_")
 
-    val combinedEvents = combined._2.mkString("\t")
-    val pass = if (containsFwdPrimer && containsRevPrimer &&
-      matchRate1._1 > .90 && matchRate2._1 > .90 &&
-      matchRate1._2 > 50 && matchRate2._2 > 50 &&
-      !(combinedEvents contains "WT_")) "PASS" else "FAIL"
-
-    outputStatsFile.write(readPairs.pair1.read.name.replace(' ', '_') + "\tpaired\t-1\t" + matchRate1._1 + "\t" + matchRate2._1 + "\t" +
-      matchRate1._2 + "\t" + matchRate2._2 + "\t" + matchRate1._2 + "\t" + matchRate2._2 + "\t" +
-      containsFwdPrimer + "\t" + containsRevPrimer + "\t" + pass + "\t" + combined._2.mkString("\t") + "\n")
+    outputStatsFile.outputStatEntry(StatsContainer(readPairs.pair1.read.name, pass, containsFwdPrimer, containsRevPrimer,
+      false, false, base1Len, base2Len, 1, 1, callEvents.matchingRate1, callEvents.matchingRate2, callEvents.matchingBaseCount1, callEvents.matchingBaseCount2,
+      callEvents.alignments, callEvents.basesOverTargets))
 
   }
 }

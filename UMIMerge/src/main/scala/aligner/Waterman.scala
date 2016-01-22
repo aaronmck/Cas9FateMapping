@@ -66,12 +66,6 @@ object Waterman extends Aligner {
       tmpWriter2.close()
 
     }
-    if (reads.size == 2) {
-      //println(reads(0).bases + " " + reads(0).reverseCompAlign)
-      //println(reads(1).bases + " " + reads(1).reverseCompAlign)
-    } else {
-      //println(reads(0).bases + " " + reads(0).reverseCompAlign)
-    }
 
     /**
      * Run needlall and capture the output

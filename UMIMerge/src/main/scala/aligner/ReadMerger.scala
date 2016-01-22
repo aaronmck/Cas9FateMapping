@@ -10,7 +10,7 @@ import scala.main.SequencingRead
  */
 object ReadMerger {
   def mergeRead(read1: SequencingRead, read2: SequencingRead): Option[Tuple3[SequencingRead,Int,Int]] = {
-    val alignments = Waterman.alignTo(Array[SequencingRead](read1,read2),None,false,6.0,1.0)
+    val alignments = Waterman.alignTo(Array[SequencingRead](read1,read2),None,false)
     if (alignments.size != 2)
       return None
 

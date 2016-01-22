@@ -17,84 +17,84 @@ class AlignmentManagerTest extends FlatSpec with Matchers {
     val ref =     "AAATAAAAT"
     val readFwd = "AAAA-AAAA"
     val cutSites = CutSites.fromIntervals(Array[Tuple3[Int,Int,Int]]((3,5,7)))
-    val testCalls = AlignmentManager.callEdits(ref,readFwd,1)
-    testCalls.length should be (3)
-    testCalls(0).cigarCharacter should be ("M")
-    testCalls(0).readBase should be ("AAAA")
-    testCalls(0).refBase should be ("AAAT")
-    testCalls(0).refBase should be ("AAAT")
+    val testCalls = AlignmentManager.callEdits(ref,readFwd,1,cutSites)
+    testCalls._1.length should be (3)
+    testCalls._1(0).cigarCharacter should be ("M")
+    testCalls._1(0).readBase should be ("AAAA")
+    testCalls._1(0).refBase should be ("AAAT")
+    testCalls._1(0).refBase should be ("AAAT")
 
-    testCalls(1).cigarCharacter should be ("D")
-    testCalls(1).readBase should be ("-")
-    testCalls(1).refBase should be ("A")
+    testCalls._1(1).cigarCharacter should be ("D")
+    testCalls._1(1).readBase should be ("-")
+    testCalls._1(1).refBase should be ("A")
 
-    testCalls(2).cigarCharacter should be ("M")
-    testCalls(2).readBase should be ("AAAA")
-    testCalls(2).refBase should be ("AAAT")
+    testCalls._1(2).cigarCharacter should be ("M")
+    testCalls._1(2).readBase should be ("AAAA")
+    testCalls._1(2).refBase should be ("AAAT")
   }
 
   "A MAFFT" should "find multibase deletion correctly" in {
     val ref =     "AAATAAAAA"
     val readFwd = "AAAA---AA"
     val cutSites = CutSites.fromIntervals(Array[Tuple3[Int,Int,Int]]((3,5,7)))
-    val testCalls = AlignmentManager.callEdits(ref,readFwd,1)
-    testCalls.length should be (3)
-    testCalls(0).cigarCharacter should be ("M")
-    testCalls(0).readBase should be ("AAAA")
-    testCalls(0).refBase should be ("AAAT")
+    val testCalls = AlignmentManager.callEdits(ref,readFwd,1,cutSites)
+    testCalls._1.length should be (3)
+    testCalls._1(0).cigarCharacter should be ("M")
+    testCalls._1(0).readBase should be ("AAAA")
+    testCalls._1(0).refBase should be ("AAAT")
 
-    testCalls(1).cigarCharacter should be ("D")
-    testCalls(1).readBase should be ("---")
-    testCalls(1).refBase should be ("AAA")
+    testCalls._1(1).cigarCharacter should be ("D")
+    testCalls._1(1).readBase should be ("---")
+    testCalls._1(1).refBase should be ("AAA")
 
-    testCalls(2).cigarCharacter should be ("M")
-    testCalls(2).readBase should be ("AA")
-    testCalls(2).refBase should be ("AA")
+    testCalls._1(2).cigarCharacter should be ("M")
+    testCalls._1(2).readBase should be ("AA")
+    testCalls._1(2).refBase should be ("AA")
   }
 
   "A MAFFT" should "find multi-deletions correctly" in {
     val ref =     "AAATAAAAT"
     val readFwd = "--AA---AA"
     val cutSites = CutSites.fromIntervals(Array[Tuple3[Int,Int,Int]]((3,5,7)))
-    val testCalls = AlignmentManager.callEdits(ref,readFwd,1)
-    testCalls.length should be (3)
+    val testCalls = AlignmentManager.callEdits(ref,readFwd,1,cutSites)
+    testCalls._1.length should be (3)
 
-    testCalls(0).cigarCharacter should be ("M")
-    testCalls(0).readBase should be ("AA")
-    testCalls(0).refBase should be ("AT")
-    testCalls(0).refPos should be (2)
+    testCalls._1(0).cigarCharacter should be ("M")
+    testCalls._1(0).readBase should be ("AA")
+    testCalls._1(0).refBase should be ("AT")
+    testCalls._1(0).refPos should be (2)
 
-    testCalls(1).cigarCharacter should be ("D")
-    testCalls(1).readBase should be ("---")
-    testCalls(1).refBase should be ("AAA")
-    testCalls(1).refPos should be (4)
+    testCalls._1(1).cigarCharacter should be ("D")
+    testCalls._1(1).readBase should be ("---")
+    testCalls._1(1).refBase should be ("AAA")
+    testCalls._1(1).refPos should be (4)
 
-    testCalls(2).cigarCharacter should be ("M")
-    testCalls(2).readBase should be ("AA")
-    testCalls(2).refBase should be ("AT")
-    testCalls(2).refPos should be (7)
+    testCalls._1(2).cigarCharacter should be ("M")
+    testCalls._1(2).readBase should be ("AA")
+    testCalls._1(2).refBase should be ("AT")
+    testCalls._1(2).refPos should be (7)
   }
 
   "A MAFFT" should "find basic insertion correctly" in {
     val ref =     "AAAT-AAAA"
     val readFwd = "AAAATAAAA"
     val cutSites = CutSites.fromIntervals(Array[Tuple3[Int,Int,Int]]((3,5,7)))
-    val testCalls = AlignmentManager.callEdits(ref,readFwd,1)
-    testCalls.length should be (3)
-    testCalls(0).cigarCharacter should be ("M")
-    testCalls(0).readBase should be ("AAAA")
-    testCalls(0).refBase should be ("AAAT")
-    testCalls(0).refPos should be (0)
+    val testCalls = AlignmentManager.callEdits(ref,readFwd,1,cutSites)
+    testCalls._1.length should be (3)
+    testCalls._1(0).cigarCharacter should be ("M")
+    testCalls._1(0).readBase should be ("AAAA")
+    testCalls._1(0).refBase should be ("AAAT")
+    testCalls._1(0).refPos should be (0)
 
-    testCalls(1).cigarCharacter should be ("I")
-    testCalls(1).readBase should be ("T")
-    testCalls(1).refBase should be ("-")
-    testCalls(1).refPos should be (4)
+    testCalls._1(1).cigarCharacter should be ("I")
+    testCalls._1(1).readBase should be ("T")
+    testCalls._1(1).refBase should be ("-")
+    testCalls._1(1).refPos should be (4)
 
-    testCalls(2).cigarCharacter should be ("M")
-    testCalls(2).readBase should be ("AAAA")
-    testCalls(2).refBase should be ("AAAA")
-    testCalls(2).refPos should be (4)
+    testCalls._1(2).cigarCharacter should be ("M")
+    testCalls._1(2).readBase should be ("AAAA")
+    testCalls._1(2).refBase should be ("AAAA")
+    testCalls._1(2).refPos should be (4)
   }
 
   "A MAFFT" should "find offsets correctly" in {
@@ -102,12 +102,12 @@ class AlignmentManagerTest extends FlatSpec with Matchers {
     val readFwd = "----TAAAA"
 
     val cutSites = CutSites.fromIntervals(Array[Tuple3[Int,Int,Int]]((3,5,7)))
-    val testCalls = AlignmentManager.callEdits(ref,readFwd,1)
-    testCalls.length should be (1)
-    testCalls(0).cigarCharacter should be ("M")
-    testCalls(0).readBase should be ("TAAAA")
-    testCalls(0).refBase should be  ("AAAAA")
-    testCalls(0).refPos should be (4)
+    val testCalls = AlignmentManager.callEdits(ref,readFwd,1,cutSites)
+    testCalls._1.length should be (1)
+    testCalls._1(0).cigarCharacter should be ("M")
+    testCalls._1(0).readBase should be ("TAAAA")
+    testCalls._1(0).refBase should be  ("AAAAA")
+    testCalls._1(0).refPos should be (4)
 
   }
 
@@ -119,13 +119,13 @@ class AlignmentManagerTest extends FlatSpec with Matchers {
     val readFwd2 = "AAAAT-AAA"
 
     val cutSites = CutSites.fromIntervals(Array[Tuple3[Int,Int,Int]]((3,5,7)))
-    val testCalls1 = AlignmentManager.callEdits(ref1,readFwd1,1)
-    val testCalls2 = AlignmentManager.callEdits(ref2,readFwd2,1)
+    val testCalls1 = AlignmentManager.callEdits(ref1,readFwd1,1,cutSites)
+    val testCalls2 = AlignmentManager.callEdits(ref2,readFwd2,1,cutSites)
 
-    testCalls1.length should be (1)
-    testCalls2.length should be (3)
+    testCalls1._1.length should be (1)
+    testCalls2._1.length should be (3)
 
-    val combined = AlignmentManager.editsToCutSiteCalls(List[List[Alignment]](testCalls1,testCalls2),cutSites)
+    val combined = AlignmentManager.editsToCutSiteCalls(List[List[Alignment]](testCalls1._1,testCalls2._1),List[List[String]](testCalls1._2,testCalls2._2),cutSites)
     combined._2.size should be (1)
     combined._2(0) should be ("WT_1D+5")
   }
@@ -139,13 +139,14 @@ class AlignmentManagerTest extends FlatSpec with Matchers {
     val readFwd2 = "AAAAT-AAAAAAAT--AA"
 
     val cutSites = CutSites.fromIntervals(Array[Tuple3[Int,Int,Int]]((3,5,7),(12,14,16)))
-    val testCalls1 = AlignmentManager.callEdits(ref1,readFwd1,1)
-    val testCalls2 = AlignmentManager.callEdits(ref2,readFwd2,1)
+    val testCalls1 = AlignmentManager.callEdits(ref1,readFwd1,1,cutSites)
+    val testCalls2 = AlignmentManager.callEdits(ref2,readFwd2,1,cutSites)
 
-    testCalls1.length should be (1)
-    testCalls2.length should be (5)
+    testCalls1._1.length should be (1)
+    testCalls2._1.length should be (5)
 
-    val combined = AlignmentManager.editsToCutSiteCalls(List[List[Alignment]](testCalls1,testCalls2),cutSites)
+
+    val combined = AlignmentManager.editsToCutSiteCalls(List[List[Alignment]](testCalls1._1,testCalls2._1),List[List[String]](testCalls1._2,testCalls2._2),cutSites)
     combined._2.size should be (2)
     println(combined._2.mkString(")("))
     combined._2(0) should be ("WT_1D+5")
@@ -161,13 +162,13 @@ class AlignmentManagerTest extends FlatSpec with Matchers {
     val readFwd2 = "AAAT-T-AAAAATAAAAA"
 
     val cutSites = CutSites.fromIntervals(Array[Tuple3[Int,Int,Int]]((2,5,8)))
-    val testCalls1 = AlignmentManager.callEdits(ref1,readFwd1,1)
-    val testCalls2 = AlignmentManager.callEdits(ref2,readFwd2,1)
+    val testCalls1 = AlignmentManager.callEdits(ref1,readFwd1,1,cutSites)
+    val testCalls2 = AlignmentManager.callEdits(ref2,readFwd2,1,cutSites)
 
-    testCalls1.length should be (5)
-    testCalls2.length should be (5)
+    testCalls1._1.length should be (5)
+    testCalls2._1.length should be (5)
 
-    val combined = AlignmentManager.editsToCutSiteCalls(List[List[Alignment]](testCalls1,testCalls2),cutSites)
+    val combined = AlignmentManager.editsToCutSiteCalls(List[List[Alignment]](testCalls1._1,testCalls2._1),List[List[String]](testCalls1._2,testCalls2._2),cutSites)
     combined._2.size should be (1)
     combined._2(0) should be ("1D+4&1D+6")
   }
@@ -182,13 +183,13 @@ class AlignmentManagerTest extends FlatSpec with Matchers {
     val readFwd2 = "AAAAT-AAAAAAAT--AA"
 
     val cutSites = CutSites.fromIntervals(Array[Tuple3[Int,Int,Int]]((3,5,7),(12,14,16)))
-    val testCalls1 = AlignmentManager.callEdits(ref1,readFwd1,1)
-    val testCalls2 = AlignmentManager.callEdits(ref2,readFwd2,1)
+    val testCalls1 = AlignmentManager.callEdits(ref1,readFwd1,1,cutSites)
+    val testCalls2 = AlignmentManager.callEdits(ref2,readFwd2,1,cutSites)
 
-    testCalls1.length should be (5)
-    testCalls2.length should be (5)
+    testCalls1._1.length should be (5)
+    testCalls2._1.length should be (5)
 
-    val combined = AlignmentManager.editsToCutSiteCalls(List[List[Alignment]](testCalls1,testCalls2),cutSites)
+    val combined = AlignmentManager.editsToCutSiteCalls(List[List[Alignment]](testCalls1._1,testCalls2._1),List[List[String]](testCalls1._2,testCalls2._2),cutSites)
     combined._2.size should be (2)
     println(combined._2.mkString(")("))
     combined._2(0) should be ("1D+5")
@@ -207,7 +208,7 @@ class AlignmentManagerTest extends FlatSpec with Matchers {
     val cutsSiteObj = CutSites.fromFile(new File("test_files/TYRFull.fasta.cutSites"), 3)
 
     rRead.reverseCompAlign = true
-    println(AlignmentManager.cutSiteEvents("testUMI", ref, fRead, rRead, cutsSiteObj, 10, true)._3.mkString("<->"))
+    //println(AlignmentManager.cutSiteEvents("testUMI", ref, fRead, rRead, cutsSiteObj, 10, true)._3.mkString("<->"))
   }
 
 }

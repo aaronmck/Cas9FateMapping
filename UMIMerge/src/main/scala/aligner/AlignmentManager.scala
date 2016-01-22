@@ -4,7 +4,7 @@ import java.io.{PrintWriter, File}
 
 import _root_.aligner.aligner.Waterman
 import main.scala.Consensus
-import main.scala.utils.Utils
+import main.scala.utils.{RefReadPair, Utils}
 import utils.CutSites
 
 import scala.collection.mutable.ArrayBuffer
@@ -46,24 +46,31 @@ object AlignmentManager {
    * @param read the read string, THE SAME LENGTH as the reference,  i.e. out of an MSA program
    * @param minMatchOnEnd the minimum number of matches to end our calling, if we don't see an event like this we backtrack Is and Ds until we find an M of this size
    * @param debugInfo should we dump a ton of debug info
-   * @return a list of alignments over the read/ref combo
+   * @return a list of alignments over the read/ref combo, and a list of sequences over the target
    */
-  def callEdits(reference: String, read: String, minMatchOnEnd: Int, debugInfo: Boolean = false): List[Alignment] = {
+  def callEdits(reference: String, read: String, minMatchOnEnd: Int, cutSites: CutSites, debugInfo: Boolean = false): Tuple2[List[Alignment], List[String]] = {
     var referencePos = 0
     var inRef = false
 
     var refToEvent = List[Alignment]()
+    var targetIndexToSequence = List[StringBuilder]()
+    cutSites.fullSites.foreach { fullCutSite => targetIndexToSequence :+= new StringBuilder() }
 
-    reference.zip(read).foreach { case (refBase: Char, readBase: Char) =>
-      //if (debugInfo)
-      //  println("BASES: " + refBase + "," + readBase + " ")
+    reference.zip(read).foreach { case (refBase: Char, readBase: Char) => {
+
+      // first add to our target sequence object if we overlap target
+      cutSites.fullSites.zipWithIndex.foreach { case (fullCut, index) =>
+        if (fullCut._2 <= referencePos && fullCut._3 >= referencePos)
+          targetIndexToSequence(index) += readBase
+      }
+
+      // now we match the ref and read bases to see if we have an indel
       (refBase, readBase) match {
         case ('-', readB) if !inRef => {
           /* we might be in the situation where we haven't started the real alignment, take the offset */
         }
         case ('-', readB) if inRef => {
           // insertion
-
           if (refToEvent.isEmpty) refToEvent :+= Alignment(referencePos, refBase.toString, readBase.toString, "I")
           else refToEvent = refToEvent.init ++ refToEvent.last.combine(Alignment(referencePos, refBase.toString, readBase.toString, "I"))
 
@@ -95,9 +102,11 @@ object AlignmentManager {
 
 
       }
-    }
-    // get a bit aggressive here -- start from both ends -- strip off insertions and deletions until we hit a match or mismatch of at least 10 bases
-    return filterEnds(refToEvent, minMatchOnEnd)
+    }}
+
+    // return the filtered list of the edits, plus the list of sequences over each target region
+    // for filtering get a bit aggressive here -- start from both ends -- strip off insertions and deletions until we hit a match or mismatch of at least 10 bases
+    return (filterEnds(refToEvent, minMatchOnEnd),targetIndexToSequence.map{bld => bld.result()}.toList)
   }
 
   /**
@@ -134,70 +143,65 @@ object AlignmentManager {
    * @param debug should we dump a lot of debug info
    * @return the rate of matching for cigar "M" bases for both reads and the array of events over cutsites
    */
-  def cutSiteEvents(umi: String,
-                    reference: String,
-                    fwdRead: SequencingRead,
-                    revRead: SequencingRead,
+  def cutSiteEventsPair(fwdRead: RefReadPair,
+                    revRead: RefReadPair,
                     cutSites: CutSites,
-                    minMatchOnEnd: Int,
-                    debug: Boolean = false): Tuple9[Double, Double, Array[String],List[Alignment],List[Alignment], String, String, String, String] = {
+                    minMatchOnEnd: Int = 8,
+                    debug: Boolean = false): PairedReadCutSiteEvent = {
 
-    fwdRead.reverseCompAlign = false
-    revRead.reverseCompAlign = true
+    fwdRead.read.reverseCompAlign = false
+    revRead.read.reverseCompAlign = true
 
-    val alignmentsF = Waterman.alignTo(Array[SequencingRead](fwdRead), Some(reference), debug)
-    val alignmentsR = Waterman.alignTo(Array[SequencingRead](revRead), Some(reference), debug)
+    val alignmentsF = Waterman.alignTo(Array[SequencingRead](fwdRead.read), Some(fwdRead.reference.bases), debug)
+    val alignmentsR = Waterman.alignTo(Array[SequencingRead](revRead.read), Some(revRead.reference.bases), debug)
 
-    val events1 = AlignmentManager.callEdits(alignmentsF(0).bases, alignmentsF(1).bases, minMatchOnEnd, false)
-    val events2 = AlignmentManager.callEdits(alignmentsR(0).bases, alignmentsR(1).bases, minMatchOnEnd, false)
+    val events1 = AlignmentManager.callEdits(alignmentsF(0).bases, alignmentsF(1).bases, minMatchOnEnd, cutSites)
+    val events2 = AlignmentManager.callEdits(alignmentsR(0).bases, alignmentsR(1).bases, minMatchOnEnd, cutSites)
 
-    val combined = editsToCutSiteCalls(List[List[Alignment]](events1, events2), cutSites, debug)
+    val combined = editsToCutSiteCalls(List[List[Alignment]](events1._1, events2._1), List[List[String]](events1._2, events2._2), cutSites, debug)
 
-    val matchRate1 = percentMatch(alignmentsF(0).bases, alignmentsF(1).bases)._1
-    val matchRate2 = percentMatch(alignmentsR(0).bases, alignmentsR(1).bases)._1
+    val matchRate1 = percentMatch(alignmentsF(0).bases, alignmentsF(1).bases)
+    val matchRate2 = percentMatch(alignmentsR(0).bases, alignmentsR(1).bases)
 
-
-    if (debug) {
-      println("Events1 : \n" + events1.mkString("\n"))
-      println("Events2 : \n" + events2.mkString(","))
-    }
-
-    return (matchRate1, matchRate2, combined._2,events1,events2,alignmentsF(0).bases,alignmentsF(1).bases,alignmentsR(0).bases,alignmentsR(1).bases)
+    return PairedReadCutSiteEvent(matchRate1._1,
+      matchRate1._2,
+      matchRate2._1,
+      matchRate2._2,
+      combined._2,
+      combined._3)
   }
+
+  // an inline case class to make the return of a cutsite call more readable
+  case class PairedReadCutSiteEvent(matchingRate1: Double, matchingBaseCount1: Int, matchingRate2: Double, matchingBaseCount2: Int,  alignments: Array[String],basesOverTargets: Array[String])
 
   /**
    * given a read and reference, align and call events at the cut-sites
-   * @param reference ref string
-   * @param mergedRead read string
+   * @param mergedRead read object
    * @param cutSites the cutsutes to consider
    * @param minMatchOnEnd the minimum number of matches on the ends to keep from peeling crappy indels off
    * @param debug should we dump a lot of debug info
-   * @return the rate of matching for cigar "M" bases for both reads and the array of events over cutsites
+   * @return a cutsite event object
    */
-  def cutSiteEvent(umi: String,
-                    reference: String,
-                    mergedRead: SequencingRead,
-                    cutSites: CutSites,
-                    minMatchOnEnd: Int,
-                    debug: Boolean = false): Tuple6[Double, Double, Array[String],List[Alignment], String, String] = {
+  def cutSiteEvent(mergedRead: RefReadPair,
+                   cutSites: CutSites,
+                   minMatchOnEnd: Int = 8,
+                   debug: Boolean = false): SingleReadCutSiteEvent = {
 
-    mergedRead.reverseCompAlign = false
+    mergedRead.read.reverseCompAlign = false
 
-    val alignmentsMerged = Waterman.alignTo(Array[SequencingRead](mergedRead), Some(reference), debug)
+    val alignmentsMerged = Waterman.alignTo(Array[SequencingRead](mergedRead.read), Some(mergedRead.reference.bases), debug)
 
-    val events1 = AlignmentManager.callEdits(alignmentsMerged(0).bases, alignmentsMerged(1).bases, minMatchOnEnd, false)
+    val events1 = AlignmentManager.callEdits(alignmentsMerged(0).bases, alignmentsMerged(1).bases, minMatchOnEnd, cutSites)
 
-    val combined = editsToCutSiteCalls(List[List[Alignment]](events1), cutSites, debug)
+    val combined = editsToCutSiteCalls(List[List[Alignment]](events1._1), List[List[String]](events1._2),cutSites, debug)
 
     val matchRate1 = percentMatch(alignmentsMerged(0).bases, alignmentsMerged(1).bases)
 
-
-    if (debug) {
-      println("Events1 : \n" + events1.mkString("\n"))
-    }
-
-    return (matchRate1._1, 0.0, combined._2,events1, alignmentsMerged(0).bases, alignmentsMerged(1).bases)
+    return SingleReadCutSiteEvent(matchRate1._1, matchRate1._2, combined._2, combined._3)
   }
+
+  // an inline case class to make the return of a cutsite call more readable
+  case class SingleReadCutSiteEvent(matchingRate: Double, matchingBaseCount: Int, alignments: Array[String],basesOverTargets: Array[String])
 
 
   def overlap(pos1Start: Int, pos1End: Int, pos2Start: Int, pos2End: Int): Boolean = (pos1Start, pos1End, pos2Start, pos2End) match {
@@ -217,26 +221,40 @@ object AlignmentManager {
   }
 
   /**
-   * combine the edits over two reads
-   * @param edits the set of edits over the reads
-   * @param cutSites the cutsites we consider
+   * combine the edits over two reads -- this is bit complicated, as we have to check for collisions between aligned reads
+   * @param readAlignments the set of edits aggregated by aligned read
+   * @param readSequences the read sequences -- we have to choose the right one in the two read case
+   * @param cutSites the cutsites over the reference we consider
    * @param debug should we dump a lot of debugging info
-   * @return a tuple of: an indicator if there was a collision between edits, and an array of events over the target cut sites
+   * @return a tuple2 of: an indicator if there was a collision between edits, and an array of events over the target cut sites
    */
-  def editsToCutSiteCalls(edits: List[List[Alignment]], cutSites: CutSites, debug: Boolean = false): Tuple2[Boolean, Array[String]] = {
+  def editsToCutSiteCalls(readAlignments: List[List[Alignment]],
+                          readSequences: List[List[String]],
+                          cutSites: CutSites,
+                          debug: Boolean = false): Tuple3[Boolean, Array[String], Array[String]] = {
+
+    if (readAlignments.size != readSequences.size) {
+      throw new IllegalStateException("Unable to call edits from read alignments of length " + readAlignments.size + " and read sequences of length " + readSequences.size)
+    }
+
     var ret = Array[String]()
-    var retCovered = Array[Boolean]()
+    var retTargetSeq = Array[String]()
     var collision = false
 
-    cutSites.windows.foreach { case (start, cut, end) => {
+    cutSites.windows.zipWithIndex.foreach { case ((start, cut, end), cutSiteIndex) => {
       var candidates = Array[Alignment]()
       var matchOverlap = false
+      var nonWildType = Array[String]()
 
-      edits.foreach { editList =>
-        editList.foreach { edit => {
+      readAlignments.zipWithIndex.foreach { case(singleReadEdits,readIndex) =>
+        singleReadEdits.foreach { edit => {
           if ((edit.cigarCharacter == "D" && overlap(start, end, edit.refPos, edit.refPos + edit.refBase.length)) ||
             edit.cigarCharacter == "I" && overlap(start, end, edit.refPos, edit.refPos)) {
             // check that we haven't already added this exact edit to the list -- this will happen in paired reads where the edits agree
+
+            if (!(nonWildType contains readSequences(readIndex)(cutSiteIndex)))
+              nonWildType :+= readSequences(readIndex)(cutSiteIndex)
+
             if (!(candidates contains edit)) {
               candidates :+= edit
             } else {
@@ -245,7 +263,7 @@ object AlignmentManager {
           } else if (edit.cigarCharacter == "M" && span(edit.refPos, edit.refPos + edit.refBase.length, start, end)) {
             matchOverlap = true
             if (candidates.size > 0)
-              println(candidates(0).toEditString + " " + edit.toEditString + " " + edit.refPos + " " + (edit.refPos + edit.refBase.length) + " " +  start + " " +  end)
+              println(candidates(0).toEditString + " " + edit.toEditString + " " + edit.refPos + " " + (edit.refPos + edit.refBase.length) + " " + start + " " + end)
           }
         }
         }
@@ -254,19 +272,38 @@ object AlignmentManager {
       if (debug)
         println("Site: " + start + "-" + end + ": " + candidates.mkString("\t") + "<<<")
 
-      // look at the number of candidate events and their matching percentage, figure out what we should do with the edit
+      // create target strings
+      nonWildType.size match {
+        case 0 => retTargetSeq :+= "BLANK"
+        case 1 => retTargetSeq :+= nonWildType(0)
+        case _ => retTargetSeq :+= nonWildType.mkString(",")
+      }
+
+      // look at the number of candidate events, if there is WT sequence covering the locus, figure out what we should do with the edit
       (candidates.size, matchOverlap) match {
-        case (0,true)      => ret :+= "NONE"
-        case (0,false)     => ret :+= "UNKNOWN"
-        case (1,true)      => ret :+= "WT_" + candidates(0).toEditString
-        case (1,false)     => ret :+= candidates(0).toEditString
-        case (2,true)  if (candidates(0).toEditString == candidates(1).toEditString) => ret :+= "WT_" + candidates(0).toEditString
-        case (2,false) if (candidates(0).toEditString == candidates(1).toEditString) => ret :+= candidates(0).toEditString
-        case (2,true)      => {
+        case (0, true) => {
+          ret :+= "NONE"
+        }
+        case (0, false) => {
+          ret :+= "UNKNOWN"
+        }
+        case (1, true) => {
+          ret :+= "WT_" + candidates(0).toEditString
+        }
+        case (1, false) => {
+          ret :+= candidates(0).toEditString
+        }
+        case (2, true) if (candidates(0).toEditString == candidates(1).toEditString) => {
+          ret :+= "WT_" + candidates(0).toEditString
+        }
+        case (2, false) if (candidates(0).toEditString == candidates(1).toEditString) => {
+          ret :+= candidates(0).toEditString
+        }
+        case (2, true) => {
           collision = true
           ret :+= "WT_" + candidates(0).toEditString + "&" + candidates(1).toEditString
         }
-        case (2,false)      => {
+        case (2, false) => {
           collision = true
           ret :+= candidates(0).toEditString + "&" + candidates(1).toEditString
         }
@@ -278,7 +315,7 @@ object AlignmentManager {
     }
     }
 
-    return (collision, ret)
+    return (collision, ret, retTargetSeq)
   }
 
   /**
@@ -287,7 +324,7 @@ object AlignmentManager {
    * @param read the read string of the same length as the reference string
    * @return a proportion of bases that match, and the count of non-gap bases
    */
-  def percentMatch(ref: String, read: String, minimumAlignedBases: Int = 50): Tuple2[Double,Int]= {
+  def percentMatch(ref: String, read: String, minimumAlignedBases: Int = 50): Tuple2[Double, Int] = {
     var bases = 0
     var matches = 0
     var nonGap = 0
@@ -303,8 +340,8 @@ object AlignmentManager {
     }
 
     if (bases < minimumAlignedBases)
-      (-1.0,0)
+      (-1.0, 0)
     else
-      (matches.toDouble / bases.toDouble,nonGap)
+      (matches.toDouble / bases.toDouble, nonGap)
   }
 }
