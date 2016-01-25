@@ -117,6 +117,9 @@ function redrawTheTopHistgram() {
     
     var yEvents = d3.scale.linear().domain([0, yMax]).range([global_height, 0]);
     var formatter = d3.format("2.1%");
+    if (yMax < 0.001) {
+	formatter = d3.format("2.2%");
+    }
 
     var yAxis = d3.svg.axis()
         .scale(yEvents)
@@ -129,16 +132,15 @@ function redrawTheTopHistgram() {
     var roundPlaces = 2
     
     if (topScaleIsLog) {
-	
 	formatter = d3.format("2");
 
 	if (yMax < 0.01) {
-	    formatter = d3.format("2.2");
+	    formatter = d3.format("2.1");
 	    logScaleFactor = 1000.0 // yeah our log scaling is a bit ugly
 	    roundPlaces = 4
 	}
 	if (yMax < 0.001) {
-	    formatter = d3.format("2.3");
+	    formatter = d3.format("2.2");
 	    logScaleFactor = 10000.0 // yeah our log scaling is a bit ugly
 	    roundPlaces = 6
 	}
@@ -151,6 +153,13 @@ function redrawTheTopHistgram() {
             .ticks(3)
             .tickFormat(formatter)
             .outerTickSize(0);
+    } else {
+	if (yMax < 0.01) {
+	    roundPlaces = 4
+	}
+	if (yMax < 0.001) {
+	    roundPlaces = 6
+	}
     }
 
     var xAxis = d3.svg.axis()
@@ -248,7 +257,7 @@ function redrawTheTopHistgram() {
                 if (i % 2 != 0) {
                     this.remove();
                 } else {
-                    var valueToConvert = +this.textContent / logScaleFactor
+                    var valueToConvert = +this.textContent / (logScaleFactor / 100.0) 
                     this.children[1].textContent = d3.round(valueToConvert,roundPlaces) + "%"
                 }
             });
