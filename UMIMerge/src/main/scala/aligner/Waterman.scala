@@ -24,7 +24,7 @@ object Waterman extends Aligner {
 
 
   override def alignTo(reads: Array[SequencingRead], ref: Option[String], debug: Boolean): Array[SequencingRead] = {
-    alignTo(reads, ref, debug, 10.0, 0.5)
+    alignTo(reads, ref, debug, 15.0, 0.5)
   }
 
   def alignTo(reads: Array[SequencingRead], ref: Option[String], debug: Boolean, gapOpen: Double, gapExtend: Double): Array[SequencingRead] = {
@@ -76,7 +76,7 @@ object Waterman extends Aligner {
       (o: String) => out.append(o + "\n"),
       (e: String) => err.append(e + "\n"))
 
-    val call = "needleall -datafile /net/shendure/vol10/projects/CRISPR.lineage/nobackup/reference_data/EDNAFULL -endopen 10.0 -endextend 0.01 -snucleotide1 -snucleotide2 -gapopen " +
+    val call = "needleall -datafile /net/shendure/vol10/projects/CRISPR.lineage/nobackup/reference_data/EDNAFULL -snucleotide1 -snucleotide2 -gapopen " +
       gapOpen + " -gapextend " + gapExtend + " -asequence " + tmp + " -bsequence " +
       tmp2 + " -aformat3 fasta -auto -stdout"
 
@@ -110,9 +110,12 @@ object Waterman extends Aligner {
     if (ref.isDefined) {
       ret :+= Aligner.SequencingReadFromNameBases(referenceName, readStrings(0))
       ret :+= Aligner.SequencingReadFromNameBases(readNames(1), readStrings(1))
+      //println("reference: " + readStrings(0))
+      //println("read     : " + readStrings(1))
     } else {
       ret :+= Aligner.SequencingReadFromNameBases(readNames(0), readStrings(0))
       ret :+= Aligner.SequencingReadFromNameBases(readNames(1), readStrings(1))
+      //println("read     : " + readStrings(0))
     }
 
     //tmp.delete()

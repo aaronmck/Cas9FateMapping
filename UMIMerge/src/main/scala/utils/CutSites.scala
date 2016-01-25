@@ -26,8 +26,8 @@ class CutSites {
 }
 
 object CutSites {
-  // a constant for the distance between the cutsite and the start of the pam, used to define the full target window
-  val cutsiteToPamDistance = 4
+  // a constant for the distance between the cutsite and the end of the pam, used to define the full target window
+  val cutsiteToPamDistance = 6
 
   /**
    * load a cutsite object from a CSV file on disk
@@ -42,11 +42,14 @@ object CutSites {
     Source.fromFile(cutsiteFile).getLines().drop(1).zipWithIndex.foreach { case (line, index) => {
       val sp = line.split("\t")
 
-      cut.cutSites(index) = sp(2).toInt
-      cut.startSites(index) = sp(1).toInt
-      cut.fullSites :+=(sp(0), sp(1).toInt, sp(2).toInt + cutsiteToPamDistance)
-      cut.windows :+=(sp(2).toInt - windowSize, sp(2).toInt, sp(2).toInt + windowSize)
-      //println((sp(2).toInt - windowSize) + "\t" +  sp(2).toInt + "\t" + (sp(2).toInt + windowSize))
+      val name = sp(0)
+      val start = sp(1).toInt - 1
+      val cutSite = sp(2).toInt - 1
+
+      cut.cutSites(index) = cutSite
+      cut.startSites(index) = start
+      cut.fullSites :+=(name, start, cutSite + cutsiteToPamDistance)
+      cut.windows :+=(cutSite - windowSize, cutSite, cutSite + windowSize)
     }
     }
 

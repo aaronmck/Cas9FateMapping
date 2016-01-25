@@ -61,7 +61,7 @@ case class StatsContainer(name: String, keep: Boolean, hasFWDPrimer: Boolean, ha
 
   // create an output string version of the target data
   val targetEventString = targetEvents.mkString(StatsOutput.sepString)
-  val targetSequenceString = targetEvents.mkString(StatsOutput.sepString)
+  val targetSequenceString = targetSequences.mkString(StatsOutput.sepString)
 
   // get rid of bad characters in any read name
   def convertName(readName: String): String = readName.replace(' ', '_')

@@ -152,8 +152,8 @@ object UMIProcessing extends App {
 
       umisTotal(umi) = true
 
-      val containsForward = readNoUMI.slice(0, 25) contains (primers(0))
-      val containsReverse = rGroup(1).slice(0, 25) contains (Utils.reverseComplement(primers(1)))
+      val containsForward = readNoUMI contains (primers(0))
+      val containsReverse = rGroup(1) contains (Utils.reverseComplement(primers(1)))
 
       if (containsForward && containsReverse) {
         val readBuilderF = umiReadsFWD.getOrElse(umi, new ArrayBuffer[SequencingRead]())
@@ -242,7 +242,7 @@ object UMIProcessing extends App {
 
 
     // --------------------------------------------------------------------------------
-    // for each UMI -- process its individual reads that couldn't be merged
+    // for each UMI -- process the collection of reads
     // --------------------------------------------------------------------------------
     umiReadsFWDReplacements.foreach { case (umi, reads) => {
       //println(umi)

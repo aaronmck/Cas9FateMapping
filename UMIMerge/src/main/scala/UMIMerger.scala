@@ -35,7 +35,7 @@ object UMIMerger {
     // some constants we should probably bubble-up
     val minReadLength = 30
     val minMeanQualScore = 30.0
-
+    val debug = false
 
     // use MSA to align all the reads
     val preparedFWD = Consensus.prepareConsensus(readsF, minReadLength, minMeanQualScore)
@@ -63,24 +63,36 @@ object UMIMerger {
         val reversePrimer = Utils.reverseComplement(revConsensus.bases) contains primers(1)
         val readsKept = (mergedF.size + mergedR.size).toDouble / (readsF.size + readsR.size).toDouble
 
-
+        if (debug) {
+          println("UMI::::: " + umi)
+        }
 
         val merged = ReadMerger.mergeRead(fwdConsensus, revConsensus)
+        if (debug && merged.isDefined) {
+          println("Merged candidate ")
+          println(merged.get.matches)
+          println(merged.get.overlap)
+          println(merged.get.orientationOK)
 
-        if (merged.isDefined && merged.get._2 > 20 && merged.get._2.toDouble / merged.get._3.toDouble > 0.90) {
+        }
+
+        if (merged.isDefined && merged.get.matches > 20 && merged.get.matches.toDouble / merged.get.overlap.toDouble > 0.50 && merged.get.orientationOK) {
           // get the overlap of cutsite events
           try {
-            val mergedRefPair = RefReadPair(SequencingRead.readFromNameAndSeq("ref",ref),merged.get._1)
-            val cutEvents = AlignmentManager.cutSiteEvent(mergedRefPair, cutSites)
+            if (debug) {
+              println("MERGED")
+            }
+            val mergedRefPair = RefReadPair(SequencingRead.readFromNameAndSeq("ref",ref),merged.get.read)
+            val cutEvents = AlignmentManager.cutSiteEvent(mergedRefPair, cutSites,debug=debug)
 
             var failureReason: String = getFailureStatus(readsKept, cutEvents.matchingRate, None, forwardPrimer, reversePrimer)
 
-            if (failureReason == "PASS") {
+            if (failureReason == "PASS" && !cutEvents.collision) {
               outputFastq1.write(fwdConsensus.toFastqString(umi + "FWD", true) + "\n")
               outputFastq2.write(revConsensus.toFastqString(umi + "REV", false) + "\n")
             }
 
-            outputStats.outputStatEntry(StatsContainer(umi, failureReason == "PASS", forwardPrimer, reversePrimer,
+            outputStats.outputStatEntry(StatsContainer(umi, failureReason == "PASS" && !cutEvents.collision, forwardPrimer, reversePrimer,
               true, true, readsF.size, readsR.size, mergedF.size, mergedR.size, cutEvents.matchingRate, -1, cutEvents.matchingBaseCount, -1,
               cutEvents.alignments, cutEvents.basesOverTargets))
 
@@ -94,18 +106,21 @@ object UMIMerger {
         } else {
           // get the overlap of cutsite events
           try {
+            if (debug) {
+              println("SINGLE READS")
+            }
             val fwdPair = RefReadPair(SequencingRead.readFromNameAndSeq("ref",ref),fwdConsensus)
             val revPair = RefReadPair(SequencingRead.readFromNameAndSeq("ref",ref),revConsensus)
-            val cutEvents = AlignmentManager.cutSiteEventsPair(fwdPair, revPair, cutSites)
+            val cutEvents = AlignmentManager.cutSiteEventsPair(fwdPair, revPair, cutSites,debug=debug)
 
             var failureReason: String = getFailureStatus(readsKept, cutEvents.matchingRate1, Some(cutEvents.matchingRate2), forwardPrimer, reversePrimer)
 
-            if (failureReason == "PASS") {
+            if (failureReason == "PASS" && !cutEvents.collision) {
               outputFastq1.write(fwdConsensus.toFastqString(umi + "FWD", true) + "\n")
               outputFastq2.write(revConsensus.toFastqString(umi + "REV", false) + "\n")
             }
 
-            outputStats.outputStatEntry(StatsContainer(umi, failureReason == "PASS", forwardPrimer, reversePrimer,
+            outputStats.outputStatEntry(StatsContainer(umi, failureReason == "PASS" && !cutEvents.collision, forwardPrimer, reversePrimer,
               true, false, readsF.size, readsR.size, mergedF.size, mergedR.size, cutEvents.matchingRate1, cutEvents.matchingRate2, cutEvents.matchingBaseCount1, cutEvents.matchingBaseCount2,
               cutEvents.alignments, cutEvents.basesOverTargets))
 

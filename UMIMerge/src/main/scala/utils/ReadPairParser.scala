@@ -29,8 +29,9 @@ class ReadPairParser(readFile: File) extends Iterator[RefReadPair] {
     while(reads.hasNext) {
       var line = reads.peek
       if ((line startsWith ">") && inRead) {
-        return Some(RefReadPair(SequencingRead.readFromNameAndSeq(refName, refString.result().mkString("")),
-          SequencingRead.readFromNameAndSeq(readName, readString.result().mkString(""))))
+        return Some(RefReadPair(
+          SequencingRead.readFromNameAndSeq(refName, refString.result().mkString("")),
+          SequencingRead.readFromNameAndSeq(readName, readString.result().mkString("")),true))
       }
 
       else if (line startsWith ">") {
@@ -76,4 +77,4 @@ class PeekFilelineIterator(iter: Iterator[String]) extends Iterator[String] {
   def peek: String = nextString.get
 }
 
-case class RefReadPair(reference: SequencingRead, read: SequencingRead)
+case class RefReadPair(reference: SequencingRead, read: SequencingRead, aligned: Boolean = false)
