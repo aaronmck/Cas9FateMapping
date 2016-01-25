@@ -10,40 +10,35 @@
 
 var numberToType = {"0": "match", "1": "deletion", "2": "insertion"};
 
-// the mutation rate and type plot on the top
-var left_panel_total_width = 800;
-
-var topHeight = 100
-
-var margin = {top: 0, right: 0, bottom: 5, left: 100},
-    width = left_panel_total_width,
-    height = topHeight - margin.top - margin.bottom,
-    heat_height = 400;
+// sizes for various bounding boxes
+var global_width = 800;
+var global_height = 100;
+var heat_height = 800;
+var margin_left = 80;
+var right_histo_width = 200;
 
 // colors we use for events throughout the plots
 // 1) color for unedited
 // 2) color for deletions
 // 3) color for insertions
 // 3) color for mismatch? might be useful for TYR data
-//var heatmap_colors = ['#D8D8D8','#CE343F','#2E4D8E','#D49E35'];
-//http://paletton.com/#uid=7000A0kwi++bu++hX++++rd++kX
 var heatmap_colors = ['#FFFFFF', '#FF0000', '#1A63FF', '#00FF00'];
 
 // the labels for types of events we support in the input data
 var mutation_values = ["reference", "insertion", "deletion", "mismatch"];
 var maxValue = mutation_values.length;
 
-var formatThousands = d3.format("0,000");
+// state data -- these are a hack to get around the async data loading in D3 -- sorry!
 var xScaleIsLog = true
 var topScaleIsLog = false
+occurance_data = ""
 
 // constant for the maximum height of a row in the heatmap and corresponding righthand barchart
 var maxReadHeight = 15
 
-// to give the plots on the bottom a cleaner look, crop the bar sizes to X proportion of their total height
+// to give the plots on the bottom a cleaner look, crop the bar sizes to a proportion of their total height (to give white boundries between)
 var cropHeightProp = 0.8
 
-occurance_data = ""
 
 // from http://bl.ocks.org/mbostock/7621155
 var superscript = "⁰¹²³⁴⁵⁶⁷⁸⁹",
@@ -55,32 +50,29 @@ var superscript = "⁰¹²³⁴⁵⁶⁷⁸⁹",
 // setup the SVG panels
 // ************************************************************************************************************
 var svgHeat = d3.select("#heatmap").append("svg")
-    .attr("width", width)
-    .attr("height", left_panel_total_width)
+    .attr("width", global_width)
+    .attr("height", heat_height)
     .append("g")
 
 var svg = d3.select("#topplot").append("svg")
-    .attr("width", width)
-    .attr("height", height + margin.top + margin.bottom)
+    .attr("width", global_width)
+    .attr("height", global_height)
     .append("g")
-    .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
-
+    
 var svgHeatRight = d3.select("#heatmapRight")
     .append("svg")
-    .attr("width", 200)
-    .attr("height", left_panel_total_width + margin.top + margin.bottom + 100)
+    .attr("width", right_histo_width)
+    .attr("height", global_width)
     .append("g")
-
-
+    
 function logTheTop() {
     d3.select("#topplot").select("svg").remove();
     
     svg = d3.select("#topplot").append("svg")
-	.attr("width", width)
-	.attr("height", height + margin.top + margin.bottom)
+	.attr("width", global_width)
+	.attr("height", global_height)
 	.append("g")
-	.attr("transform", "translate(" + margin.left + "," + margin.top + ")");
-    
+	
     if (topScaleIsLog) {
         topScaleIsLog = false
     } else {
@@ -118,12 +110,12 @@ function redrawTheTopHistgram() {
     }));
 
     var xEvents = d3.scale.ordinal().domain(muts[0].map(function (d) {
-        return d.x;
-    })).rangeRoundBands([0, width], .1);
+        return +d.x;
+    })).rangeRoundBands([margin_left, global_width]);
     
     var yMax = d3.max(muts[0].map(function (d) {return d.y;}))
     
-    var yEvents = d3.scale.linear().domain([0, yMax]).range([height, 0]);
+    var yEvents = d3.scale.linear().domain([0, yMax]).range([global_height, 0]);
     var formatter = d3.format("2.1%");
 
     var yAxis = d3.svg.axis()
@@ -134,7 +126,7 @@ function redrawTheTopHistgram() {
         .outerTickSize(0);
     
     if (topScaleIsLog) {
-	yEvents = d3.scale.log().domain([1, yMax * 100.0]).range([height, 0]);
+	yEvents = d3.scale.log().domain([1, yMax * 100.0]).range([global_height, 0]);
 	formatter = d3.format("2");
 	yAxis = d3.svg.axis()
             .scale(yEvents)
@@ -167,7 +159,7 @@ function redrawTheTopHistgram() {
         .attr('width', function (d) {
             return xEvents(20) - xEvents(0)
         })
-        .attr('height', height)
+        .attr('height', global_height)
         .attr("fill-opacity", .1)
         .attr("stroke", "#888888")
     
@@ -182,7 +174,7 @@ function redrawTheTopHistgram() {
         .attr('width', function (d) {
             return xEvents(4) - xEvents(0)
         })
-        .attr('height', height)
+        .attr('height', global_height)
         .attr("fill-opacity", .4)
         .attr("fill", "gray")
 	.attr("stroke", "#888888")
@@ -221,6 +213,7 @@ function redrawTheTopHistgram() {
 	svg.append("svg:path").attr("d", line(muts[0])).attr("class", "line").attr("fill", "none").attr("stroke", heatmap_colors[1]).attr("stroke-width", "3px")
 	svg.append("svg:path").attr("d", line(muts[1])).attr("class", "line").attr("fill", "none").attr("stroke", heatmap_colors[2]).attr("stroke-width", "3px")	
     }
+    
     svg.append("g")
         .attr("class", "y axis")
         .attr("transform", "translate(" + (xEvents(0) - 5) + ",0)")
@@ -246,12 +239,11 @@ function redrawTheTopHistgram() {
     //Add the text legend
     svg.append("text")
         .attr("x", function (d) {
-            return -100;
+            return -1 * global_height; // due to the transform
         })
         .attr("y", function (d) {
-            return 40;
+            return 20;
         })
-        .attr("transform", "translate(0," + (-50) + ")")
         .attr("text-anchor", "left")
         .style("font-size", "12px")
         .text(legendText)
@@ -263,8 +255,8 @@ function changeHistogram() {
     
     svgHeatRight = d3.select("#heatmapRight")
         .append("svg")
-        .attr("width", 200)
-        .attr("height", left_panel_total_width + margin.top + margin.bottom + 100)
+        .attr("width", right_histo_width)
+        .attr("height", global_width)
         .append("g")
 
     if (xScaleIsLog) {
@@ -308,7 +300,6 @@ function redrawHistogram() {
         xAxis = d3.svg.axis().scale(prescale).orient("top").tickSize(6); // .tickFormat(function(d) { return "10" + formatPower(Math.round(Math.log(d))); });
     }
 
-
     var mutbox2 = svgHeatRight.selectAll(".bar")
         .data(occurance_data)
         .enter().append("svg:g")
@@ -316,13 +307,11 @@ function redrawHistogram() {
         .style("fill", function (d, i) {
             return heatmap_colors[0];
         })
-        .style("stroke", function (d, i) {
+       .style("stroke", function (d, i) {
             return "gray";
         });
-
    
     var wt_colors = ['#000000', '#00FF00', '#555555', '#117202', '#333333'];
-
 
     mutbox2.selectAll(".bar")
         .data(occurance_data)
@@ -335,7 +324,7 @@ function redrawHistogram() {
             return Math.max(0.5,prescale(+d.rawCount));
         })
         .attr("y", function (d) {
-            return topHeight + yScale(+d.array) + ((1.0 - cropHeightProp) * gridHeight);
+            return global_height + yScale(+d.array) + ((1.0 - cropHeightProp) * gridHeight);
         })
         .attr("height", function (d) {
             return gridHeight * cropHeightProp;
@@ -385,9 +374,9 @@ function redrawHistogram() {
         })
         .attr("y", function (d) {
             if (xScaleIsLog) {
-                return topHeight - 50;
+                return global_height - 50;
             } else {
-                return topHeight - 90;
+                return global_height - 90;
             }
         })
         .attr("text-anchor", "left")
@@ -419,10 +408,10 @@ d3.tsv(top_read_melted_to_base, function (error, data) {
     
     var xScale = d3.scale.ordinal().domain(data.map(function (d) {
         return +d.position;
-    })).rangeRoundBands([margin.left, left_panel_total_width + margin.left]);
+    })).rangeRoundBands([margin_left, global_width]);
 
     var dmt = xScale.domain().length;
-    var gridWidth = parseInt(width / dmt);
+    var gridWidth = parseInt(global_width / dmt);
     var readCount = parseInt(d3.max(data, function (d) {
         return +d.array;
     })) + 1;
