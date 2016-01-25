@@ -252,9 +252,14 @@ function redrawTheTopHistgram() {
     // if we're logged we need to adjust the legend text and manualy remove a bunch of labels /ticks from the y axis
     if (topScaleIsLog) {
 	legendText = "Editing percent (log)"
-	svg.selectAll(".tick")
-            .each(function (d, i) {
-                if (i % 2 != 0) {
+
+	// god damn do log transform axes in D3 suck -- here's what we do: filter down to 3 or 4 tick points.  Otherwise it's too crowded,
+	// or too sparse.  
+	var fullSelection = svg.selectAll(".tick")
+	var everyNth = Math.ceil(fullSelection.size()/4)
+	
+        fullSelection.each(function (d, i) {
+                if (i % everyNth != 0) {
                     this.remove();
                 } else {
                     var valueToConvert = +this.textContent / (logScaleFactor / 100.0) 
