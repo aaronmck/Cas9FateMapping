@@ -6,14 +6,10 @@
 //
 // ----------------------------------------------------------------------
 
-// the total width of the plots on the right and left sides
-
-var numberToType = {"0": "match", "1": "deletion", "2": "insertion"};
-
 // sizes for various bounding boxes
 var global_width = 800;
 var global_height = 100;
-var heat_height = 800;
+var heat_height = 400;
 var margin_left = 80;
 var right_histo_width = 200;
 
@@ -39,6 +35,8 @@ var maxReadHeight = 15
 // to give the plots on the bottom a cleaner look, crop the bar sizes to a proportion of their total height (to give white boundries between)
 var cropHeightProp = 0.8
 
+// map event integer values to types
+var numberToType = {"0": "match", "1": "deletion", "2": "insertion"};
 
 // from http://bl.ocks.org/mbostock/7621155
 var superscript = "⁰¹²³⁴⁵⁶⁷⁸⁹",
