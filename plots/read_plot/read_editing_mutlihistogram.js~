@@ -259,13 +259,13 @@ function redrawTheTopHistgram() {
 	var everyNth = Math.ceil(fullSelection.size()/4)
 	
         fullSelection.each(function (d, i) {
-                if (i % everyNth != 0) {
-                    this.remove();
-                } else {
-                    var valueToConvert = +this.textContent / (logScaleFactor / 100.0) 
-                    this.children[1].textContent = d3.round(valueToConvert,roundPlaces) + "%"
-                }
-            });
+            if (i % everyNth != 0 && i != fullSelection.size() - 1) {
+                this.remove();
+            } else {
+                var valueToConvert = +this.textContent / (logScaleFactor / 100.0) 
+                this.children[1].textContent = d3.round(valueToConvert,roundPlaces) + "%"
+            }
+        });
     }
     
     //Add the text legend

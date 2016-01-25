@@ -256,7 +256,7 @@ function redrawTheTopHistgram() {
 	// god damn do log transform axes in D3 suck -- here's what we do: filter down to 3 or 4 tick points.  Otherwise it's too crowded,
 	// or too sparse.  
 	var fullSelection = svg.selectAll(".tick")
-	var everyNth = Math.ceil(fullSelection.size()/4)
+	var everyNth = Math.ceil(fullSelection.size()/3)
 	
         fullSelection.each(function (d, i) {
             if (i % everyNth != 0 && i != fullSelection.size() - 1) {
