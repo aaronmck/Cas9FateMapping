@@ -37,6 +37,12 @@ var formatThousands = d3.format("0,000");
 var xScaleIsLog = true
 var topScaleIsLog = false
 
+// constant for the maximum height of a row in the heatmap and corresponding righthand barchart
+var maxReadHeight = 15
+
+// to give the plots on the bottom a cleaner look, crop the bar sizes to X proportion of their total height
+var cropHeightProp = 0.8
+
 occurance_data = ""
 
 // from http://bl.ocks.org/mbostock/7621155
@@ -69,7 +75,7 @@ var svgHeatRight = d3.select("#heatmapRight")
 function logTheTop() {
     d3.select("#topplot").select("svg").remove();
     
-    svg = svg = d3.select("#topplot").append("svg")
+    svg = d3.select("#topplot").append("svg")
 	.attr("width", width)
 	.attr("height", height + margin.top + margin.bottom)
 	.append("g")
@@ -205,7 +211,7 @@ function redrawTheTopHistgram() {
             return xEvents(d.x);
         })
         .y(function (d) {
-            return yEvents(Math.max(1.0,100.0 * d.y));
+            return yEvents(Math.max(1,100.0 * d.y));
         });
 
     if (topScaleIsLog) {
@@ -223,16 +229,17 @@ function redrawTheTopHistgram() {
 
     var legendText = "Editing percentage"
 
+    //var zero = d3.round(
     // if we're logged we need to adjust the legend text and manualy remove a bunch of labels /ticks from the y axis
     if (topScaleIsLog) {
 	legendText = "Editing percent (log)"
 	svg.selectAll(".tick")
             .each(function (d, i) {
-                if (i % 5 != 0) {
+                if (i % 4 != 0) {
                     this.remove();
                 } else {
                     var valueToConvert = +this.textContent
-                    this.children[1].textContent = valueToConvert + "%"
+                    this.children[1].textContent = d3.round(valueToConvert,2) + "%"
                 }
             });
     }
@@ -273,10 +280,16 @@ function changeHistogram() {
 // ************************************************************************************************************
 function redrawHistogram() {
 
+    // find the maximum number of reads
+    var readCount = d3.max(occurance_data.map(function (d) {return +d.array;})) + 1;
+    var gridHeight = Math.min(maxReadHeight, parseInt(heat_height / readCount));
+    var totalHistoHeight = gridHeight * readCount
+    
     formatter = d3.format("2");
     var yScale = d3.scale.ordinal().domain(occurance_data.map(function (d) {
         return d.array;
-    })).rangeRoundBands([0, heat_height]);
+    })).rangeRoundBands([0, totalHistoHeight]);
+    
     var yAxis = d3.svg.axis().scale(yScale).orient("left").ticks(4)
         .tickFormat(formatter)
         .outerTickSize(0);
@@ -307,13 +320,7 @@ function redrawHistogram() {
             return "gray";
         });
 
-    var readCount = parseInt(d3.max(occurance_data.map(function (d) {
-        return +d.array;
-    })));
-    var gridHeight = parseInt(heat_height / readCount);
-
-    // both the fill and stroke colors for the WT and non-WT HMIDs
-    //var wt_colors = ['#000000', '#3EAF2C', '#555555', '#117202', '#333333'];
+   
     var wt_colors = ['#000000', '#00FF00', '#555555', '#117202', '#333333'];
 
 
@@ -328,10 +335,10 @@ function redrawHistogram() {
             return Math.max(0.5,prescale(+d.rawCount));
         })
         .attr("y", function (d) {
-            return topHeight + yScale(+d.array);
+            return topHeight + yScale(+d.array) + ((1.0 - cropHeightProp) * gridHeight);
         })
         .attr("height", function (d) {
-            return gridHeight * 0.65;
+            return gridHeight * cropHeightProp;
         })
         .style("fill", function (d, i) {
             return wt_colors[+d.WT];
@@ -398,10 +405,18 @@ d3.tsv(occurance_file, function (error, data) {
 // read plots -- add a block for each of the high frequency reads we observe
 // ************************************************************************************************************
 d3.tsv(top_read_melted_to_base, function (error, data) {
+    var readCount = parseInt(d3.max(data, function (d) {
+        return +d.array;
+    })) + 1;
+    var gridHeight = Math.min(maxReadHeight, parseInt(heat_height / readCount));
+    var totalHeatHeight = gridHeight * readCount
+
+    
     // the scales and axis for the heatmap data
     var yScale = d3.scale.ordinal().domain(data.map(function (d) {
         return +d.array;
-    })).rangeRoundBands([0, heat_height]);
+    })).rangeRoundBands([0, totalHeatHeight]);
+    
     var xScale = d3.scale.ordinal().domain(data.map(function (d) {
         return +d.position;
     })).rangeRoundBands([margin.left, left_panel_total_width + margin.left]);
@@ -410,11 +425,8 @@ d3.tsv(top_read_melted_to_base, function (error, data) {
     var gridWidth = parseInt(width / dmt);
     var readCount = parseInt(d3.max(data, function (d) {
         return +d.array;
-    }));
-    var gridHeight = parseInt(heat_height / readCount);
-    var gridPadding = 0.1
+    })) + 1;
     var gridOffset = parseInt(gridWidth + (gridWidth / 2));
-
     var max = d3.entries(data).sort(function (a, b) {
             return d3.descending(+a.value.position, +b.value.position);
         }
@@ -437,16 +449,16 @@ d3.tsv(top_read_melted_to_base, function (error, data) {
         .data(data)
         .enter().append("svg:rect")
         .attr("x", function (d, i) {
-            return xScale(+d.position)
+            return xScale(+d.position);
         })
         .attr("y", function (d, i) {
-            return yScale(+d.array) + (gridHeight * 0.1)
+            return yScale(+d.array) + ((1.0 - cropHeightProp) * gridHeight)
         })
         .attr("width", function (d) {
             return gridWidth;
         })
         .attr("height", function (d) {
-            return gridHeight * 0.8
+            return gridHeight * cropHeightProp;
         })
         .style("fill", function (d) {
             return heatmap_colors[+d.event];
