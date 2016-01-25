@@ -6,10 +6,14 @@
 //
 // ----------------------------------------------------------------------
 
+// the total width of the plots on the right and left sides
+
+var numberToType = {"0": "match", "1": "deletion", "2": "insertion"};
+
 // sizes for various bounding boxes
 var global_width = 800;
 var global_height = 100;
-var heat_height = 400;
+var heat_height = 800;
 var margin_left = 80;
 var right_histo_width = 200;
 
@@ -35,8 +39,6 @@ var maxReadHeight = 15
 // to give the plots on the bottom a cleaner look, crop the bar sizes to a proportion of their total height (to give white boundries between)
 var cropHeightProp = 0.8
 
-// map event integer values to types
-var numberToType = {"0": "match", "1": "deletion", "2": "insertion"};
 
 // from http://bl.ocks.org/mbostock/7621155
 var superscript = "⁰¹²³⁴⁵⁶⁷⁸⁹",
@@ -109,12 +111,15 @@ function redrawTheTopHistgram() {
 
     var xEvents = d3.scale.ordinal().domain(muts[0].map(function (d) {
         return +d.x;
-    })).rangeRoundBands([margin_left, global_width]);
+    })).rangeBands([margin_left, global_width]);
     
     var yMax = d3.max(muts[0].map(function (d) {return d.y;}))
     
     var yEvents = d3.scale.linear().domain([0, yMax]).range([global_height, 0]);
     var formatter = d3.format("2.1%");
+    if (yMax < 0.001) {
+	formatter = d3.format("2.2%");
+    }
 
     var yAxis = d3.svg.axis()
         .scale(yEvents)
@@ -122,16 +127,39 @@ function redrawTheTopHistgram() {
         .ticks(4)
         .tickFormat(formatter)
         .outerTickSize(0);
+
+    var logScaleFactor = 100.0
+    var roundPlaces = 2
     
     if (topScaleIsLog) {
-	yEvents = d3.scale.log().domain([1, yMax * 100.0]).range([global_height, 0]);
 	formatter = d3.format("2");
+
+	if (yMax < 0.01) {
+	    formatter = d3.format("2.1");
+	    logScaleFactor = 1000.0 // yeah our log scaling is a bit ugly
+	    roundPlaces = 4
+	}
+	if (yMax < 0.001) {
+	    formatter = d3.format("2.2");
+	    logScaleFactor = 10000.0 // yeah our log scaling is a bit ugly
+	    roundPlaces = 6
+	}
+	
+	yEvents = d3.scale.log().domain([1, yMax * logScaleFactor]).range([global_height, 0]);
+	
 	yAxis = d3.svg.axis()
             .scale(yEvents)
             .orient("left")
             .ticks(3)
             .tickFormat(formatter)
             .outerTickSize(0);
+    } else {
+	if (yMax < 0.01) {
+	    roundPlaces = 4
+	}
+	if (yMax < 0.001) {
+	    roundPlaces = 6
+	}
     }
 
     var xAxis = d3.svg.axis()
@@ -143,7 +171,7 @@ function redrawTheTopHistgram() {
     // ************************************************************************************************************
     
     var minCutSite = d3.min(cut_site_data, function(d) {
-	return +d.position
+	return(+d.position);
     }) - 19;
     
     svg.selectAll('.target')
@@ -201,7 +229,7 @@ function redrawTheTopHistgram() {
             return xEvents(d.x);
         })
         .y(function (d) {
-            return yEvents(Math.max(1,100.0 * d.y));
+            return yEvents(Math.max(1,logScaleFactor * d.y));
         });
 
     if (topScaleIsLog) {
@@ -226,21 +254,22 @@ function redrawTheTopHistgram() {
 	legendText = "Editing percent (log)"
 	svg.selectAll(".tick")
             .each(function (d, i) {
-                if (i % 4 != 0) {
+                if (i % 2 != 0) {
                     this.remove();
                 } else {
-                    var valueToConvert = +this.textContent
-                    this.children[1].textContent = d3.round(valueToConvert,2) + "%"
+                    var valueToConvert = +this.textContent / (logScaleFactor / 100.0) 
+                    this.children[1].textContent = d3.round(valueToConvert,roundPlaces) + "%"
                 }
             });
     }
+    
     //Add the text legend
     svg.append("text")
         .attr("x", function (d) {
             return -1 * global_height; // due to the transform
         })
         .attr("y", function (d) {
-            return 20;
+            return 10;
         })
         .attr("text-anchor", "left")
         .style("font-size", "12px")
@@ -278,7 +307,7 @@ function redrawHistogram() {
     formatter = d3.format("2");
     var yScale = d3.scale.ordinal().domain(occurance_data.map(function (d) {
         return d.array;
-    })).rangeRoundBands([0, totalHistoHeight]);
+    })).rangeBands([0, totalHistoHeight]);
     
     var yAxis = d3.svg.axis().scale(yScale).orient("left").ticks(4)
         .tickFormat(formatter)
@@ -388,6 +417,7 @@ d3.tsv(occurance_file, function (error, data) {
     redrawHistogram();
 });
 
+
 // ************************************************************************************************************
 // read plots -- add a block for each of the high frequency reads we observe
 // ************************************************************************************************************
@@ -402,14 +432,14 @@ d3.tsv(top_read_melted_to_base, function (error, data) {
     // the scales and axis for the heatmap data
     var yScale = d3.scale.ordinal().domain(data.map(function (d) {
         return +d.array;
-    })).rangeRoundBands([0, totalHeatHeight]);
+    })).rangeBands([0, totalHeatHeight]);
     
     var xScale = d3.scale.ordinal().domain(data.map(function (d) {
         return +d.position;
-    })).rangeRoundBands([margin_left, global_width]);
+    })).rangeBands([margin_left, global_width]);
 
     var dmt = xScale.domain().length;
-    var gridWidth = parseInt(global_width / dmt);
+    var gridWidth = parseInt((global_width - margin_left) / dmt);
     var readCount = parseInt(d3.max(data, function (d) {
         return +d.array;
     })) + 1;
@@ -424,14 +454,6 @@ d3.tsv(top_read_melted_to_base, function (error, data) {
         }
     )[0].value.position;
 
-
-    var rectangle = svgHeat.append("rect")
-        .attr("x", xScale(0))
-        .attr("y", yScale(0))
-        .attr("width", xScale(max) - xScale(min))
-        .attr("height", yScale(heat_height))
-        .attr("fill", "#BBB");
-
     var heatMap = svgHeat.selectAll(".heatmap")
         .data(data)
         .enter().append("svg:rect")
@@ -442,7 +464,11 @@ d3.tsv(top_read_melted_to_base, function (error, data) {
             return yScale(+d.array) + ((1.0 - cropHeightProp) * gridHeight)
         })
         .attr("width", function (d) {
-            return gridWidth;
+	    if (+d.event != 2) {
+		return gridWidth * 1.5; // 1* this is a hack, explained at the end of the file
+	    } else {
+		return gridWidth * 1.5; // * +d.insertSize;
+	    }
         })
         .attr("height", function (d) {
             return gridHeight * cropHeightProp;
@@ -450,8 +476,11 @@ d3.tsv(top_read_melted_to_base, function (error, data) {
         .style("fill", function (d) {
             return heatmap_colors[+d.event];
         })
-    //.style("stroke", function(d) { return d3.rgb("white"); });
-
-    //heatMap.transition().duration(1).style("fill", function(d) { return heatmap_colors[+d.event]; });
 
 });
+
+/* hacks explained:
+   1*: the bigger problem here is that we can't use rangeRoundBands because the outside padding looks really bad when we
+   have variable target counts across the plots. So we have to use rangeBands, which leads to anti-aliasing problems with
+   the bars.  We use this multiplier to make the deletions and insertions seem like blocks and not individual bases
+*/
