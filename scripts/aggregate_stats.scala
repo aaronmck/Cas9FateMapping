@@ -16,15 +16,13 @@ var isUMI      = args(3) match {
 
 // columns to keep
 val columnsToKeep =
-  if (isUMI) Array[String]("UMI","keptPCT","fail.reason","initF","filteredF","finalF","initR","filteredR","finalR","fwdBasesMatching","revBasesMatching")
-  else Array[String]("readName","type","mergedReadLen","read1len","read2len","matchRate1","alignedBases1","matchRate2","alignedBases2","hasForwardPrimer","hasReversePrimer","keep")
+  Array[String]("readName","keep","umi","merged")
 
 output2.write("sample\tusedEntries\ttotalEntries\n")
 output.write("sample\t" + columnsToKeep.mkString("\t") + "\t")
 
 val minBasesMatchingPostAlignment = 0.90
 val passString = "PASS"
-var outputHeader = false
 
 var totalMaxTargets = 0
 
@@ -47,9 +45,9 @@ statsFiles.foreach{statsFileLine => {
 }}
 
 println("Max targets in dataset: " + totalMaxTargets)
-output.write((1 until (totalMaxTargets+1)).map{case(ind) => "target" + ind}.mkString("\t") + "\tHMID\tisMerged\n")
+output.write((1 until (totalMaxTargets+1)).map{case(ind) => "target" + ind}.mkString("\t") + "\tHMID\n")
 
-
+// "readName","keep","umi","merged","fwdBasesMatching","revBasesMatching"
 statsFiles.foreach{statsFileLine => {
   val statsFile = new File(statsFileLine)
 
@@ -71,17 +69,14 @@ statsFiles.foreach{statsFileLine => {
     var totalLines = 0
     openStatsFile.foreach{line => {
       val sp = line.split("\t")
-      val fwdMatch = if (isUMI) sp(headerTokens("fwdBasesMatching")).toDouble else sp(headerTokens("matchRate1")).toDouble
-      val isMerged = if (isUMI) sp(headerTokens("readR")).toUpperCase == "MERGED" else sp(headerTokens("type")).toUpperCase == "MERGED"
-      val isMergedStr = if (isMerged) "merged" else "tworead"
-      val passFail = if (isUMI) sp(headerTokens("fail.reason")) else sp(headerTokens("keep"))
+      val passFail = sp(headerTokens("keep")) == "PASS"
 
-      if (fwdMatch > minBasesMatchingPostAlignment && passFail == passString && !(line contains "WT_") && !(line contains "UNKNOWN")) {
+      if (passFail && !(line contains "WT_") && !(line contains "UNKNOWN")) {
         val targets = (1 until (totalMaxTargets +1)).map{case(ind) => if (headerTokens contains ("target" + ind)) sp(headerTokens("target" + ind)) else "NA"}
         val mergedCigar = targets.filter(tk => tk != "NA").mkString("-")
         val mergedTabCigar = targets.mkString("\t")
         
-        output.write(sample + "\t" + sortedColumns.map{case(col) => sp(col)}.mkString("\t") + "\t" + mergedTabCigar + "\t" + mergedCigar + "\t" + isMergedStr + "\n")
+        output.write(sample + "\t" + sortedColumns.map{case(col) => sp(col)}.mkString("\t") + "\t" + mergedTabCigar + "\t" + mergedCigar + "\n")
         usedLines += 1
       }
       totalLines += 1

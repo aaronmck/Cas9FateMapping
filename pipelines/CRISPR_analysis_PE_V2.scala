@@ -43,7 +43,6 @@ import org.broadinstitute.gatk.queue.util.QScriptUtils
 import org.broadinstitute.gatk.queue.function.ListWriterFunction
 import org.broadinstitute.gatk.utils.commandline.Hidden
 import org.broadinstitute.gatk.utils.commandline
-import org.broadinstitute.gatk.engine.arguments.ValidationExclusion
 
 import collection.JavaConversions._
 import htsjdk.samtools.SAMFileReader
@@ -59,10 +58,20 @@ class DNAQC extends QScript {
   qscript =>
 
   /** **************************************************************************
-    * Required Parameters
+    * Data Parameters
     * ************************************************************************** */
-  @Input(doc = "Tab-delimited (seperated with commas)", fullName = "input", shortName = "i", required = true)
+  @Input(doc = "Tab-delimited tear sheet containing sample information", fullName = "input", shortName = "i", required = true)
   var input: File = _
+
+  @Input(doc = "where to put aggregated stats", fullName = "aggLocation", shortName = "agg", required = true)
+  var aggregateLocation: File = _
+
+  @Argument(doc = "the experiment name, used to generate the base output folder on the web server", fullName = "expName", shortName = "expName", required = true)
+  var experimentalName: String = ""
+
+  @Argument(doc = "the mapping from sample name to biologically meaningful clade", fullName = "cladeAssignments", shortName = "cladeAssignments", required = false)
+  var cladeAssignments: File = ""
+
 
   /** **************************************************************************
     * Optional Parameters -- control parameters for the script (alignment, etc)
@@ -144,6 +153,47 @@ class DNAQC extends QScript {
   @Input(doc = "the path to PandaSeq", fullName = "PandaSeq", shortName = "PandaSeq", required = false)
   var pandaseqPath: File = "/net/gs/vol3/software/modules-sw/PANDAseq/2.8.1/Linux/RHEL6/x86_64/bin/pandaseq"
 
+  @Input(doc = "the path the javascript conversion script", fullName = "JSTable", shortName = "JSTable", required = false)
+  var toJSTableScript: File = "/net/shendure/vol10/projects/CRISPR.lineage/nobackup/codebase/scripts/stats_to_javascript_tables.scala"
+
+  @Argument(doc = "zip two reads together", fullName = "ZipReads", shortName = "ZipReads", required = false)
+  var zipReadsPath = "/net/shendure/vol10/projects/CRISPR.lineage/nobackup/codebase/scripts/zip_two_read_files.scala"
+
+  @Argument(doc = "move the data over to the web location", fullName = "webpub", shortName = "webpub", required = false)
+  var toWebPublishScript = "/net/shendure/vol10/projects/CRISPR.lineage/nobackup/codebase/scripts/push_to_web_location.scala"
+
+  @Argument(doc = "the web location", fullName = "webpubLoc", shortName = "webpubLoc", required = false)
+  var webLocation = "/net/shendure/vol2/www/content/members/aaron/fate_map/"
+
+  @Argument(doc = "perform NJ and distance matrix calculation with this tool", fullName = "NJDist", shortName = "NJDist", required = false)
+  var distanceMatrix = "/net/shendure/vol10/projects/CRISPR.lineage/nobackup/codebase/ConstrainedNeighborJoin/target/scala-2.11/ConstrainedNJ-assembly-1.0.jar"
+
+  @Argument(doc = "perform NJ and plotting in R with this script", fullName = "NJScript", shortName = "NJScript", required = false)
+  var njScript = "/net/shendure/vol10/projects/CRISPR.lineage/nobackup/codebase/scripts/nj_from_distance_matrix.R"
+
+  @Argument(doc = "aggregate stats files (UMIed reads) together", fullName = "stats", shortName = "stats", required = false)
+  var aggregateScripts = "/net/shendure/vol10/projects/CRISPR.lineage/nobackup/codebase/scripts/aggregate_stats.scala"
+
+  @Argument(doc = "analyize stats file and generate a bunch of plots", fullName = "plotsScript", shortName = "plotsScript", required = false)
+  var statsFileAnalysis = "/net/shendure/vol10/projects/CRISPR.lineage/nobackup/codebase/scripts/stats_file_analysis.py"
+
+  @Argument(doc = "Perform basic statistics and output plots about the reads / callsets with this script", fullName = "postProcess", shortName = "postProcess", required = false)
+  var postProcess = "/net/shendure/vol10/projects/CRISPR.lineage/nobackup/codebase/scripts/post_process_alignments.R"
+
+  @Argument(doc = "The script the generates a report at the end of the run", fullName = "reportScript", shortName = "reportScript", required = false)
+  var aggReportScript = "/net/shendure/vol10/projects/CRISPR.lineage/nobackup/codebase/scripts/aggregate_report.Rmd"
+
+  @Argument(doc = "the script that takes a tree file and ", fullName = "treeCopy", shortName = "treeCopy", required = false)
+  var treeCopyScript = "/net/shendure/vol10/projects/CRISPR.lineage/nobackup/codebase/scripts/prepare_tree.scala"
+
+  @Argument(doc = "The script that turns a distance matrix into a tree", fullName = "createTree", shortName = "cTree", required = false)
+  var createTreeScript = "/net/shendure/vol10/projects/CRISPR.lineage/nobackup/codebase/scripts/create_tree.R"
+
+  @Argument(doc = "The four gamete test", fullName = "fourGamete", shortName = "fourGamete", required = false)
+  var fourGameteScript = "/net/shendure/vol10/projects/CRISPR.lineage/nobackup/codebase/scripts/four_gamete_test.scala"
+
+  @Argument(doc = "create a file for use in PHYLIP's mix", fullName = "toMix", shortName = "toMix", required = false)
+  var toMixScript = "/net/shendure/vol10/projects/CRISPR.lineage/nobackup/codebase/scripts/stats_to_mix_input.scala"
 
   /** **************************************************************************
     * Global Variables
@@ -152,10 +202,17 @@ class DNAQC extends QScript {
   // Gracefully hide Queue's output -- this is very important otherwise there's Queue output everywhere and it's a mess
   val queueLogDir: String = ".qlog/"
 
-  /** **************************************************************************
-    * Main script
-    * ************************************************************************** */
+  // ** **************************************************************************
+  // * Main script
+  // * **************************************************************************
   def script() {
+    var umiStatsFiles = List[File]()
+    var nonUmiStatsFiles = List[File]()
+
+    val sampleWebBase =      dirOrCreateOrFail(new File(webLocation +  File.separator + experimentalName), "our output web publishing directory")
+    val aggReportDir =       dirOrCreateOrFail(new File(webLocation +  File.separator + experimentalName + File.separator + "aggregateHMIDReport"), "our report output directory")
+    val aggWebTreeLocation = dirOrCreateOrFail(new File(webLocation +  File.separator + experimentalName + File.separator + "tree"), "our output tree directory")
+
     // read in the tear sheet and process each sample
     parseTearSheet(input).foreach(sampleObj => {
 
@@ -176,54 +233,49 @@ class DNAQC extends QScript {
       val pairedEnd = sampleObj.fastq2.exists()
 
       // **************************** Setup files and directories ******************************************
-      val webLoc = webSite + File.separator + sampleObj.sample + File.separator
+      
 
-
-      // create the per-sample output directories, verifying that they either exist already or can be made
-      val sampleOutput = dirOrCreateOrFail(new File(sampleObj.outputDir + File.separator + sampleObj.sample), "sample output directory")
-      val initialFastQCDir = dirOrCreateOrFail(new File(sampleOutput + File.separator + "initial_fastQC"), "initial fastqc directory")
+      // create the per-sample output directories, verifying that they either exist already or can be made, also make the base web dir, it's ok that this is
+      // duplicated, as don't try to make it if it exists
+      val webLoc =             webSite + File.separator + sampleObj.sample + File.separator
+      val sampleOutput =       dirOrCreateOrFail(new File(sampleObj.outputDir + File.separator + sampleObj.sample), "sample output directory")
+      val initialFastQCDir =   dirOrCreateOrFail(new File(sampleOutput + File.separator + "initial_fastQC"), "initial fastqc directory")
       val initialFastQMerged = dirOrCreateOrFail(new File(sampleOutput + File.separator + "initial_fastQC_Merged"), "initial fastqc directory")
       val postCleanFastQCDir = dirOrCreateOrFail(new File(sampleOutput + File.separator + "post_clean_fastQC"), "final fastqc directory")
+      val webTreeLocation =    dirOrCreateOrFail(new File(webLocation +  File.separator + experimentalName + File.separator + sampleTag + File.separator + "tree"), "our output tree directory")
+      val sampleWebLocation =  dirOrCreateOrFail(new File(webLocation +  File.separator + experimentalName + File.separator + sampleTag), "our output web publishing directory")
+      val plotsDir =           dirOrCreateOrFail(new File(webLocation +  File.separator + experimentalName + File.separator + sampleTag + File.separator + "umiPlots"), "our output plot directory")
 
       // our barcode split files
       var barcodeSplit1 = new File(sampleOutput + File.separator + sampleTag + ".barcodeSplit.fastq1.fq.gz")
       var barcodeSplit2 = new File(sampleOutput + File.separator + sampleTag + ".barcodeSplit.fastq2.fq.gz")
 
-      val sam = new File(sampleOutput + File.separator + sampleTag + ".sam")
-      val bam = new File(sampleOutput + File.separator + sampleTag + ".bam")
+      val samUnmergedFasta = new File(sampleOutput + File.separator + sampleTag + ".UM.fasta")
+      val samMergedFasta = new File(sampleOutput + File.separator + sampleTag + ".M.fasta")
 
       var mergedReads = new File(sampleOutput + File.separator + sampleTag + ".merged.fq.gz")
       var mergedReadUnzipped = new File(sampleOutput + File.separator + sampleTag + ".merged.fq")
-      var fwdUnzipped = new File(sampleOutput + File.separator + sampleTag + ".fwd.fq")
-      var revUnzipped = new File(sampleOutput + File.separator + sampleTag + ".rev.fq")
-      val readsUnzipped1 = new File(sampleOutput + File.separator + sampleTag + ".read1.fq")
-      val readsUnzipped2 = new File(sampleOutput + File.separator + sampleTag + ".read2.fq")
+      var unmergedUnzipped = new File(sampleOutput + File.separator + sampleTag + ".unmerged.fq")
 
       val mergedUMIStripped = new File(sampleOutput + File.separator + sampleTag + ".merged.stripedUMI.fq.gz")
       val mergedUMIStrippedStats = new File(webLoc + "/UMI_stats.txt")
 
-      val samMergedPreFilter = new File(sampleOutput + File.separator + sampleTag + ".preFilter.merged.sam")
-      val samMerged = new File(sampleOutput + File.separator + sampleTag + ".merged.sam")
-      val bamMerged = new File(sampleOutput + File.separator + sampleTag + ".merged.bam")
-
       // ************************************** split the input files by barcodes, either one or two **************************************
       var barcodeFiles = if (dualBarcode) List[File](sampleObj.fastqBarcode1,sampleObj.fastqBarcode2) else List[File](sampleObj.fastqBarcode1)
-
       var inputFiles = if (pairedEnd) List[File](sampleObj.fastq1,sampleObj.fastq2) else List[File](sampleObj.fastq1)
       var processedFastqs = if (pairedEnd) List[File](barcodeSplit1,barcodeSplit2) else List[File](barcodeSplit1)
       val barcodeConfusion = new File(sampleOutput + File.separator + sampleTag + ".barcodeConfusion")
       val barcodeStats = new File(sampleOutput + File.separator + sampleTag + ".barcodeStats")
       val overlapFile = new File(sampleOutput + File.separator + sampleTag + ".readOverlap")
 
-      if (sampleObj.barcode1 != "all" && sampleObj.barcode2 != "all") {
+      if (sampleObj.barcode1.toLowerCase != "all" && sampleObj.barcode2.toLowerCase != "all") {
         add(Maul(inputFiles, barcodeFiles, List[String](sampleObj.barcode1,sampleObj.barcode2), processedFastqs, barcodeStats, barcodeConfusion,overlapFile))
         inputFiles = List[File](barcodeSplit1,barcodeSplit2)
       }
 
-
-              val postProcessedFastq1 = new File(sampleOutput + File.separator + sampleTag + ".cleaned.trim.fastq1.fq.gz")
-              val postProcessedFastq2 = new File(sampleOutput + File.separator + sampleTag + ".cleaned.trim.fastq2.fq.gz")
-              val cleanedFastqs = List[File](postProcessedFastq1,postProcessedFastq2)
+      val postProcessedFastq1 = new File(sampleOutput + File.separator + sampleTag + ".cleaned.trim.fastq1.fq.gz")
+      val postProcessedFastq2 = new File(sampleOutput + File.separator + sampleTag + ".cleaned.trim.fastq2.fq.gz")
+      val cleanedFastqs = List[File](postProcessedFastq1,postProcessedFastq2)
 
       // run an Fastqc so we know what we started with
       // ************************************************************************************
@@ -232,46 +284,107 @@ class DNAQC extends QScript {
       val toAlignFastq1 = new File(sampleOutput + File.separator + sampleTag + ".fwd.fastq")
       val toAlignFastq2 = new File(sampleOutput + File.separator + sampleTag + ".rev.fastq")
       val toAlignStats = new File(sampleOutput + File.separator + sampleTag + ".stats")
+      
+      val toAlignUMIStats = new File(sampleOutput + File.separator + sampleTag + ".umi.stats")
 
+      val perBaseEventFile = new File(sampleOutput + File.separator + sampleTag + ".perBase")
+      val topReadFile = new File(sampleOutput + File.separator + sampleTag + ".topReadEvents")
+      val topReadCount = new File(sampleOutput + File.separator + sampleTag + ".topReadCounts")
+      val allReadCount = new File(sampleOutput + File.separator + sampleTag + ".allReadCounts")
+      val cutSites = new File(sampleObj.reference + ".cutSites")
+
+      // clean up the reads as much as possible
+      val unpairedReads = List[File](new File(sampleOutput + File.separator + sampleTag + ".unpaired1.fq.gz"),new File(sampleOutput + File.separator + sampleTag + ".unpaired2.fq.gz"))
+      val cleanedTmp = List[File](new File(sampleOutput + File.separator + sampleTag + ".cleanedInter1.fq.gz"),new File(sampleOutput + File.separator + sampleTag + ".cleanedInter2.fq.gz"))
+      add(Trimmomatic(inputFiles,adaptersFile,cleanedTmp,unpairedReads))
 
       if (sampleObj.UMIed) {
+
+        add(SeqPrepNoMerge(cleanedTmp, cleanedFastqs))
+
         // collapse the reads by their UMI and output FASTA files with the remaining quality reads
-        add(UMIProcessingPaired(inputFiles(0),
-          inputFiles(1),
+        add(UMIProcessingPaired(postProcessedFastq1,
+          postProcessedFastq2,
           toAlignFastq1,
           toAlignFastq2,
           toAlignStats,
+          toAlignUMIStats,
           10,
           new File(sampleObj.reference + ".primers"),
           new File(sampleObj.reference),
           sampleObj.sample,
-          new File(sampleObj.reference + ".cutSites")))
+          new File(sampleObj.reference + ".cutSites"),
+          sampleObj.UMIed))
 
+        umiStatsFiles :+= toAlignStats 
 
+        //add(StatsAnalysis(toAlignStats, plotsDir, sampleTag))
 
-        // SeqPrep to merge reads
-        //add(SeqPrep(List[File](toAlignFastq1,toAlignFastq2), cleanedFastqs, mergedReads))
-        add(Fastqc(cleanedFastqs, initialFastQMerged))
-        add(Fastqc(List[File](mergedReads), initialFastQMerged))
       } else {
+        add(SeqPrep(cleanedTmp, cleanedFastqs, mergedReads))
 
-        add(SeqPrep(inputFiles, cleanedFastqs, mergedReads))
-        add(Fastqc(List[File](mergedReads), initialFastQMerged))
+        add(ZipReadFiles(postProcessedFastq1, postProcessedFastq2, unmergedUnzipped))
         add(Gunzip(mergedReads, mergedReadUnzipped))
-        add(NeedlemanAll(sampleObj.reference, mergedReadUnzipped, sam))
-      }
-      // unzip and process the UMI data into a single call fasta file
-      //add(Gunzip(mergedReads, mergedReadUnzipped))
-      //add(Gunzip(postProcessedFastq1, fwdUnzipped))
-      //add(Gunzip(postProcessedFastq2, revUnzipped))
 
-      //val outputSam = new File(sampleOutput + File.separator + sampleTag + ".sam")
-      //val outputSamF = new File(sampleOutput + File.separator + sampleTag + ".fwd.sam")
-      //val outputSamR = new File(sampleOutput + File.separator + sampleTag + ".rev.sam")
-      //add(NeedlemanAll(sampleObj.reference, mergedReadUnzipped, outputSam))
-      //add(SmithWaterman(sampleObj.reference, List[File](postProcessedFastq1), outputSamF))
-      //add(SmithWaterman(sampleObj.reference, List[File](postProcessedFastq2), outputSamR))
+        add(NeedlemanAllFasta(sampleObj.reference, unmergedUnzipped, samUnmergedFasta, false))
+        add(NeedlemanAllFasta(sampleObj.reference, mergedReadUnzipped, samMergedFasta, false))
+
+        add(ReadsToStats(samUnmergedFasta,
+          samMergedFasta,
+          toAlignStats,
+          cutSites,
+          new File(sampleObj.reference + ".primers"),
+          sampleObj.sample))
+
+        nonUmiStatsFiles :+= toAlignStats 
+
+      }
+
+      add(ToJavascriptTables(toAlignStats, cutSites, perBaseEventFile, topReadFile, topReadCount,allReadCount))
+      add(ToWebPublish(sampleWebLocation, perBaseEventFile, topReadFile, topReadCount, cutSites, allReadCount))
+      add(FourGametes(toAlignStats,
+        new File(sampleOutput + File.separator + sampleTag + ".fourGametes"),
+        new File(sampleOutput + File.separator + sampleTag + ".alleleCounts")))
+      //add(MixFile(toAlignStats,new File(sampleOutput + File.separator + sampleTag + ".mix")))
+
+      // create the distances files
+      val treeFile = new File(sampleOutput + File.separator + sampleTag + ".tree")
+      val annotationFile = new File(sampleOutput + File.separator + sampleTag + ".annotations")
+      val distanceFile = new File(sampleOutput + File.separator + sampleTag + ".distance")
+      add(DistanceCalculation(toAlignStats, treeFile, annotationFile, distanceFile))
     })
+
+
+    // UMI set finishing
+    if (umiStatsFiles.size > 0) {
+      
+      // agg. all of the stats together, do the distance calculation, and create a tree
+      val mergedStatsFile = new File(aggregateLocation + File.separator + "merged.umi.stats")
+      val mergedUMIInfo = new File(aggregateLocation + File.separator + "merged.umi.info")
+      add(AggregateStatsFiles(umiStatsFiles, mergedStatsFile, mergedUMIInfo, true))
+
+      add(AggregateReport(mergedStatsFile,aggReportDir))
+
+      val treeFile = new File(aggregateLocation + File.separator + "merged.tree")
+      val annotationFile = new File(aggregateLocation + File.separator + "merged.annotations")
+      val completeAnnotationFile = new File(aggregateLocation + File.separator + "merged.complete.annotations")
+      val distanceFile = new File(aggregateLocation + File.separator + "merged.distance")
+      add(DistanceCalculation(mergedStatsFile, treeFile, annotationFile, distanceFile))
+
+      // create the tree files -- 
+      add(CreateTree(distanceFile,treeFile,annotationFile,completeAnnotationFile))
+      add(CreateHTMLTree(treeFile,aggWebTreeLocation))
+
+    }
+    // non-UMI finishing
+    else {
+      // agg. all of the stats together, do the distance calculation, and create a tree
+      val mergedNonUMIStatsFile = new File(aggregateLocation + File.separator + "merged.noumi.stats")
+      val mergedNonUMIInfo = new File(aggregateLocation + File.separator + "merged.nonumi.info")
+      add(AggregateStatsFiles(nonUmiStatsFiles, mergedNonUMIStatsFile, mergedNonUMIInfo, false))
+
+      add(AggregateReport(mergedNonUMIStatsFile,aggReportDir))
+    }
   }
 
   /** **************************************************************************
@@ -370,7 +483,7 @@ class DNAQC extends QScript {
     this.memoryLimit = 6 // set this a bit high, there's a weird java / SGE interactions that require higher mem reservations
     this.residentRequest = 6
     this.residentLimit = 6
-    //this.isIntermediate = false // by default delete the intermediate files, if you want to keep output from a task set this to false in the case class
+    this.isIntermediate = false // by default delete the intermediate files, if you want to keep output from a task set this to false in the case class
   }
 
   trait SAMargs extends PicardBamFunction with ExternalCommonArgs {
@@ -387,69 +500,38 @@ class DNAQC extends QScript {
     * ************************************************************************** */
 
   // ********************************************************************************************************
-  case class AddReadGroup(inBam: File, outBam: File, readGroup: ReadGroup) extends ExternalCommonArgs {
-    @Input(doc = "the input bam file") var input = inBam
-    @Output(doc = "the output bam file") var output = outBam
+  case class ToJavascriptTables(statsFile: File, cutSites: File, perBaseEvents: File, topReads: File, topReadCounts: File, allEventCounts: File) extends ExternalCommonArgs {
+    @Input(doc = "the input stats file") var stats = statsFile
+    @Input(doc = "the  cut sites information file") var cuts = cutSites
+    @Output(doc = "per base event counts") var perBase = perBaseEvents
+    @Output(doc = "the top reads and their base by base events") var topR = topReads
+    @Output(doc = "the the counts for all the top reads") var topReadC = topReadCounts
+    @Output(doc = "the the counts for all the reads") var allReadC = allEventCounts
 
-    var cmd = "java -Xmx4g -jar " + picardPath + "/AddOrReplaceReadGroups.jar INPUT=" + input + " OUTPUT=" + output
-    cmd += " RGID=" + readGroup.id + " RGLB=" + readGroup.lb + " RGPL=ILLUMINA RGPU=" + readGroup.pl
-    cmd += " RGSM=" + readGroup.sm + " RGCN=" + readGroup.cn + " RGDS=" + readGroup.ds
+    def commandLine = "scala -J-Xmx6g " + toJSTableScript + " " + stats + " " + perBase + " " + topR + " " + topReadC + " " + allReadC + " " + cuts
 
-    def commandLine = cmd
-
-    this.analysisName = queueLogDir + outBam + ".rg"
-    this.jobName = queueLogDir + outBam + ".rg"
+    this.analysisName = queueLogDir + stats + ".toJS"
+    this.jobName = queueLogDir + stats + ".toJS"
     this.memoryLimit = 8
-  }
-
-
-  // set the max file handles to 1000, most UW machines are set to 1024 for some unknown (1970's inspired) reason
-  // ********************************************************************************************************
-  case class Dedup(inBam: File, outBam: File, metricsFile: File, maxFileHandles: Int = 1000) extends ExternalCommonArgs {
-    @Input(doc = "the input bam file") var input = inBam
-    @Output(doc = "the output bam, with duplicates marked") var output = outBam
-    @Output(doc = "the metrics file, with information on the duplicate counts") var metrics = metricsFile
-    @Argument(doc = "the max number of file handles we can have open at any one time") var maxFLH = maxFileHandles
-
-    def commandLine = "java -Xmx4g -jar " + picardPath + "/MarkDuplicates.jar INPUT=" + input + " OUTPUT=" + output + " METRICS_FILE=" + metrics + " MAX_FILE_HANDLES_FOR_READ_ENDS_MAP=" + maxFLH
-
-    this.analysisName = queueLogDir + outBam + ".dedup"
-    this.jobName = queueLogDir + outBam + ".dedup"
-    this.memoryLimit = 8
+    this.residentRequest = 8
+    this.residentLimit = 8
   }
 
   // ********************************************************************************************************
-  case class ResortSam(inSamBam: File, outBam: File, sortOrderP: SortOrder = SortOrder.coordinate) extends ExternalCommonArgs {
-    @Input(doc = "the input bam or sam file") var input = inSamBam
-    @Output(doc = "the output bam, with duplicates marked") var output = outBam
-    @Argument(doc = "the sort order file") var sortP = sortOrderP
+  case class ToWebPublish(webLocation: File, perBaseEvents: File, topReads: File, topReadCounts: File, cutSites: File, allReadCount: File) extends ExternalCommonArgs {
+    @Input(doc = "per base event counts") var webL = webLocation
+    @Input(doc = "per base event counts") var perBase = perBaseEvents
+    @Input(doc = "the top reads and their base by base events") var topR = topReads
+    @Input(doc = "the counts for all the top reads") var topReadC = topReadCounts
+    @Input(doc = "the cutsites") var cuts = cutSites
+    @Input(doc = "all HMIDs") var allReads = allReadCount
 
-    def commandLine = "java -Xmx4g -jar " + picardPath + "/SortSam.jar INPUT=" + input + " OUTPUT=" + output + " SORT_ORDER=" + sortP
+    def commandLine = "scala -J-Xmx1g " + toWebPublishScript + " " + webL + " " + perBase + " " + topR + " " + topReadC + " " + cuts + " " + allReads
 
-    this.analysisName = queueLogDir + outBam + ".sortSam"
-    this.jobName = queueLogDir + outBam + ".sortSam"
-    this.memoryLimit = 8
-  }
-
-  // our min indentical bases is set to 8, having problems with memory so I turned this up from the default 5
-  // ********************************************************************************************************
-  case class EstimateCompl(inputBam: File, outputComplexity: File, minIdentBases: Int = 8) extends ExternalCommonArgs {
-    @Input(doc = "the input bam file") var input = inputBam
-    @Output(doc = "the complexity file") var complex = outputComplexity
-    @Argument(doc = "the number of bases that have to be identical at the beginning of a read to compare") var minIB = minIdentBases
-
-    def commandLine = "java -Xmx6 -jar " + picardPath + "/EstimateLibraryComplexity.jar INPUT=" + input + " OUTPUT=" + complex + " READ_NAME_REGEX=null"
+    this.analysisName = queueLogDir + perBase + ".web"
+    this.jobName = queueLogDir + perBase + ".web"
+    this.memoryLimit = 2
     this.isIntermediate = false
-  }
-
-  // add a header onto each of our bam files
-  // ********************************************************************************************************
-  case class ReplaceSamHeader(inputBam: File, outputBam: File, header: File) extends ExternalCommonArgs {
-    @Input(doc = "the input bam file") var inBam = inputBam
-    @Output(doc = "the complexity file") var outBam = outputBam
-    @Argument(doc = "the header file") var hd = header
-
-    def commandLine = "java -Xmx6 -jar " + picardPath + "/ReplaceSamHeader.jar INPUT=" + inBam + " OUTPUT=" + outBam + " HEADER=" + header
   }
 
   // ********************************************************************************************************
@@ -584,10 +666,24 @@ class DNAQC extends QScript {
     @Argument(doc = "the reference fasta/fa") var ref = reference
     @Output(doc = "the output sam file") var outSam = outputSam
 
-    def commandLine = needlePath + " -aformat3 sam -gapextend 0.5 -gapopen 10.0 -awidth3=5000 -asequence " + ref + " -bsequence " + fq + " -outfile " + outSam
+    def commandLine = needlePath + " -endopen 10.0 -endextend 0.01 -aformat3 sam -gapextend 0.1 -gapopen 10.0 -asequence " + ref + " -bsequence " + fq + " -outfile " + outSam
 
     this.analysisName = queueLogDir + outSam + ".needle"
     this.jobName = queueLogDir + outSam + ".needle"
+  }
+
+  // Needleman-Wunsch aligner for single ended (or merged) reads
+  // ********************************************************************************************************
+  case class NeedlemanAllFasta(reference: File, inFastq: File, outputFasta: File, reverse: Boolean) extends CommandLineFunction with ExternalCommonArgs {
+    @Input(doc = "the merged read fastq") var fq = inFastq
+    @Argument(doc = "the reference fasta/fa") var ref = reference
+    @Output(doc = "the output fasta file") var outFasta = outputFasta
+
+    //-sreverse2
+    def commandLine = needlePath + " -datafile /net/shendure/vol10/projects/CRISPR.lineage/nobackup/reference_data/EDNAFULL -snucleotide1 -snucleotide2 " + (if (reverse) "-sreverse2 " else " ") + "-aformat3 fasta -gapextend 0.5 -gapopen 15.0 -asequence " + ref + " -bsequence " + fq + " -outfile " + outFasta
+
+    this.analysisName = queueLogDir + outFasta + ".needle"
+    this.jobName = queueLogDir + outFasta + ".needle"
   }
 
   // Needleman-Wunsch aligner needs uncompressed input -- stupid aligner
@@ -597,6 +693,19 @@ class DNAQC extends QScript {
     @Output(doc = "the output sam file") var outF = outFile
 
     def commandLine = "gunzip -c " + inF + " > " + outFile
+
+    this.analysisName = queueLogDir + outF + ".gunzip"
+    this.jobName = queueLogDir + outF + ".gunzip"
+  }
+
+  // interleave the two read files to better keep track of the reads post alignment
+  // ********************************************************************************************************
+  case class ZipReadFiles(inRead1File: File, inRead2File: File, outFile: File) extends CommandLineFunction with ExternalCommonArgs {
+    @Input(doc = "the read 1") var inF1 = inRead1File
+    @Input(doc = "the read 2") var inF2 = inRead2File
+    @Output(doc = "the output sam file") var outF = outFile
+
+    def commandLine = "scala " + zipReadsPath + " " + inF1 + " " + inF2 + " " + outF
 
     this.analysisName = queueLogDir + outF + ".gunzip"
     this.jobName = queueLogDir + outF + ".gunzip"
@@ -617,17 +726,22 @@ class DNAQC extends QScript {
     this.jobName = queueLogDir + outStats + ".stripUMIPaired"
   }
 
-  // So the NW aligner Needle is also stupid in that it generates invalid CIGAR strings, strip those out
+  // take the final stats file and generate some statistics on it
   // ********************************************************************************************************
-  case class FilterSAM(inSAM: File, outSAM: File, reference: File) extends CommandLineFunction with ExternalCommonArgs {
-    @Input(doc = "the input SAM") var iSAM = inSAM
-    @Output(doc = "the output SAM") var oSAM = outSAM
-    @Argument(doc = "the reference file") var ref = reference
+  case class AggregateReport(inputStatsFile: File, outputDirectory: File) extends CommandLineFunction with ExternalCommonArgs {
+    @Input(doc = "the input stats file") var iStats = inputStatsFile
+    @Argument(doc = "the output report directory") var oDir = outputDirectory
 
-    def commandLine = "scala " + filterSamScript + " " + iSAM + " " + oSAM + " " + ref
+    val outRB = new File(outputDirectory + File.separator + "report") // our base filename 
 
-    this.analysisName = queueLogDir + oSAM + ".filterSAM"
-    this.jobName = queueLogDir + oSAM + ".filterSAM"
+    def commandLine = "Rscript -e \"embryo.stats = read.delim('" + iStats + "'); require(knitr); require(markdown); opts_knit\\$set(base.dir = '" + oDir + "'); knit('" + aggReportScript + "', '" + outRB + ".md'); markdownToHTML('" + outRB + ".md', '" + outRB + ".html', options=c('use_xhtml', 'base64_images'));\""
+
+    this.analysisName = queueLogDir + iStats + ".aggReport"
+    this.jobName = queueLogDir + iStats + ".aggReport"
+    this.memoryLimit = 25 // set this a bit high, there's a weird java / SGE interactions that require higher mem reservations
+    this.residentRequest = 25
+    this.residentLimit = 25
+    this.isIntermediate = false // by default delete the intermediate files, if you want to keep output from a task set this to false in the case class
   }
 
   // analyze the edits from the final alignments
@@ -650,7 +764,7 @@ class DNAQC extends QScript {
     this.isIntermediate = false
   }
 
-// analyze the edits from the final alignments
+  // analyze the edits from the final alignments
   // ********************************************************************************************************
   case class PostProcess(dataFile: File, outputFile: File, workingDir: File, umiInfo: File, concInfo: File)
     extends CommandLineFunction with ExternalCommonArgs {
@@ -667,18 +781,39 @@ class DNAQC extends QScript {
     this.isIntermediate = false
   }
 
-  // analyze the edits from the final alignments
+  // do the distance calculation
   // ********************************************************************************************************
-  case class SamToPos(cutPosOutput: File, reference: File, bamFile: File)
+  case class DistanceCalculation(umiFileInput: File, newickOuput: File, annotationOutput: File, distanceOutput: File)
     extends CommandLineFunction with ExternalCommonArgs {
-    @Output(doc = "cut per positions file") var cutPerFile = cutPosOutput
-    @Input(doc = "the reference") var ref = reference
-    @Input(doc = "the control bam file") var bam = bamFile
+    @Input(doc = "the umi input file") var umi = umiFileInput
+    @Output(doc = "newick output file") var newick = newickOuput
+    @Output(doc = "annotation output file") var annotation = annotationOutput
+    @Output(doc = "the distance output file") var dist = distanceOutput
 
-    def commandLine = "scala -J-Xmx4g -cp /net/gs/vol1/home/aaronmck/source/sandbox/aaron/lib/target/scala-2.11/sequencing-lib-assembly-1.0.jar " + positionAnalysisPath + " " + reference + " " + bam + " " + cutPerFile + " " + cutPerFile + ".sizes " + ref + ".primers"
+    def commandLine = "java -Xmx28g -jar " + distanceMatrix + " --meltedUMIFile " + umi + " --newickFile " + newick + " --mergeInformation " + annotation + " --distanceMatrixFile " + dist
 
-    this.analysisName = queueLogDir + cutPerFile + ".crisprsites"
-    this.jobName = queueLogDir + cutPerFile + ".crisprsites"
+    this.analysisName = queueLogDir + newickOuput + ".distance"
+    this.jobName = queueLogDir + newickOuput + ".distance"
+    this.isIntermediate = false
+    this.memoryLimit = 32
+    this.residentRequest = 32
+    this.residentLimit = 32
+
+  }
+
+  // aggregate stats flies down to a single file
+  // ********************************************************************************************************
+  case class AggregateStatsFiles(inputFiles: List[File], outputStatsFile: File, outputUmiStatsFile: File, isUMI: Boolean)
+    extends CommandLineFunction with ExternalCommonArgs {
+    @Input(doc = "the umi input file") var inputFls = inputFiles
+    @Output(doc = "the output merged stats file") var outStats = outputStatsFile
+    @Output(doc = "the output umi information") var outUMIStats = outputUmiStatsFile
+    @Argument(doc = "is this a UMI or not UMI data?") var umi = isUMI
+
+    def commandLine = "scala -J-Xmx8g " + aggregateScripts + " " + inputFls.mkString(",") + " " + outStats + " " + outUMIStats + " " + (if (umi) "UMI" else "NOUMI")
+
+    this.analysisName = queueLogDir + outStats + ".outStats"
+    this.jobName = queueLogDir + outStats + ".outStats"
     this.isIntermediate = false
   }
 
@@ -697,6 +832,81 @@ class DNAQC extends QScript {
     this.isIntermediate = false
   }
 
+  // analyze each sample for recurrent events, deletions insertion rates, etc
+  // ********************************************************************************************************
+  case class StatsAnalysis(statsFile: File, outputDir: File, sampleName: String)
+    extends CommandLineFunction with ExternalCommonArgs {
+    @Input(doc = "the stats file to analyze") var statsFl = statsFile
+    @Input(doc = "the output directory for our plots") var outDir = outputDir
+    @Argument(doc = "our sample name") var sample = sampleName
+
+    def commandLine = "~/ipython_env/bin/python " +
+      statsFileAnalysis + " --stats_input_file " + statsFl + " --output_dir " + outputDir + " --number_of_targets 10 --sample_name " + sample
+
+    this.analysisName = queueLogDir + outDir + ".plots"
+    this.jobName = queueLogDir + outDir + ".plots"
+    this.isIntermediate = false
+  }
+
+  // create a tree file using the R file
+  // ********************************************************************************************************
+  case class CreateTree(distanceFile: File, outputTree: File, inputAnnotations: File, outputAnnotations: File)
+    extends CommandLineFunction with ExternalCommonArgs {
+    @Input(doc = "the distance file") var distFile = distanceFile
+    @Input(doc = "the input annotations") var inAnnotations = inputAnnotations
+    @Output(doc = "the output tree") var outTree = outputTree
+    @Output(doc = "the output annotations file") var outAnnotations = outputAnnotations
+
+    def commandLine = "Rscript " + createTreeScript + " " + distFile + " " + cladeAssignments + " " + inputAnnotations + " " + outTree + " " + outAnnotations
+
+    this.analysisName = queueLogDir + outputTree + ".rTree"
+    this.jobName = queueLogDir + outputTree + ".rTree"
+    this.isIntermediate = false
+  }
+
+    // ********************************************************************************************************
+  case class FourGametes(statsFile: File, fourGametesOutput: File, alleleCounts: File)
+    extends CommandLineFunction with ExternalCommonArgs {
+    @Input(doc = "the stats file") var stats = statsFile
+    @Output(doc = "the four gametes output") var fgOutput = fourGametesOutput
+    @Output(doc = "the allele counts") var alleleC = alleleCounts
+
+    def commandLine = "scala -J-Xmx4g " + fourGameteScript + " " + stats + " " + fgOutput + " " + alleleC
+
+    this.analysisName = queueLogDir + fgOutput + ".fgamete"
+    this.jobName = queueLogDir + fgOutput + ".fgamete"
+    this.isIntermediate = false
+  }
+
+
+    // ********************************************************************************************************
+  case class MixFile(statsFile: File, mixFile: File)
+    extends CommandLineFunction with ExternalCommonArgs {
+    @Input(doc = "the stats file") var stats = statsFile
+    @Output(doc = "the output mix file") var mixFl = mixFile
+
+    def commandLine = "scala -J-Xmx4g " + toMixScript + " " + stats + " " + mixFile
+
+    this.analysisName = queueLogDir + mixFile + ".mix"
+    this.jobName = queueLogDir + mixFile + ".mix"
+    this.isIntermediate = false
+  }
+
+
+  // copy the HTML tree file over the tree location
+  // ********************************************************************************************************
+  case class CreateHTMLTree(inputTree: File, treeDir: File)
+    extends CommandLineFunction with ExternalCommonArgs {
+    @Input(doc = "the output tree file") var iTree = inputTree
+    @Output(doc = "where to put the tree file") var tDir = treeDir
+
+    def commandLine = "scala " + treeCopyScript + " " + iTree + " " + tDir
+
+    this.analysisName = queueLogDir + treeDir + ".setupTree"
+    this.jobName = queueLogDir + treeDir + ".setupTree"
+    this.isIntermediate = false
+  }
+
   // gzip a bunch of fastqs into a single gzipped fastq
   // ********************************************************************************************************
   case class ConcatFastqs(inFastqs: List[File], outFastq: File) extends ExternalCommonArgs {
@@ -708,6 +918,7 @@ class DNAQC extends QScript {
     this.analysisName = queueLogDir + outFastq + ".concatFastqs"
     this.jobName = queueLogDir + outFastq + ".concatFastqs"
   }
+
 
   // gzip a bunch of fastqs into a single gzipped fastq
   // ********************************************************************************************************
@@ -763,12 +974,13 @@ class DNAQC extends QScript {
     @Output(doc = "output fastas (corrected)") var fqOuts = outs
     @Output(doc = "output fastas for failed reads") var fqOutsUnpaired = outputUnpaired
 
+
     // the parameters string to tack onto the end, specifying:
     var appended = "ILLUMINACLIP:" + adapters.getAbsolutePath() + ":2:30:12" // where to find the illumina adapter file
-    appended += " LEADING:3" // trim off leading bases with a quality less than 10
-    appended += " TRAILING:3" // trim off trailing bases with a quality less than 10
-    appended += " SLIDINGWINDOW:3:30" // remove bases with a quality less than 15 in a sliding window of size 5 (so if 5 bases have an mean qual < 8, cut the rest of the read)
-    appended += " MINLEN:100" // the resulting reads must have a length of at least 200
+    appended += " LEADING:10" // trim off leading bases with a quality less than 10
+    appended += " TRAILING:10" // trim off trailing bases with a quality less than 10
+    appended += " SLIDINGWINDOW:5:15" // remove bases with a quality less than 20 in a sliding window of size 3
+    appended += " MINLEN:75" // the resulting reads must have a length of at least X
 
     // setup the memory limits, high for trimmomatic (java + SGE = weird memory issues...)
     this.memoryLimit = 4
@@ -815,34 +1027,6 @@ class DNAQC extends QScript {
   }
 
   /**
-   * PandaSeq -- trimmomatic's other main competition, does read merging as well
-   *
-   * trims off adapter sequence and low quality regions in paired end sequencing data, merges on reqest
-   */
-  // ********************************************************************************************************
-  case class PandaSeq(inFastqs: List[File], outputMerged: File ) extends CommandLineFunction with ExternalCommonArgs {
-
-    @Input(doc = "input FASTAs") var fqs = inFastqs
-    @Output(doc = "output merged reads") var merged = outputMerged
-
-    if (inFastqs.length != 2)
-      throw new IllegalArgumentException("Seqprep can only be run on paired end sequencing! for input files " + inFastqs.mkString(", "))
-
-    this.memoryLimit = 4
-    this.residentRequest = 4
-    this.residentLimit = 4
-
-    // o -> minimum overlap, n -> faction of bases that must match in overlap
-    var cmd = pandaseqPath + "  -F -d rbfkms -T 1 -f " + fqs(0) + " -r " + fqs(1) + " -w " + merged
-    // pandaseq -f embryos_3_13.barcodeSplit.fastq1.fq.gz -r embryos_3_13.barcodeSplit.fastq2.fq.gz
-
-    def commandLine = cmd
-    this.isIntermediate = false
-    this.analysisName = queueLogDir + fqs(0) + ".pandaseq"
-    this.jobName = queueLogDir + fqs(0) + ".pandaseq"
-  }
-
-  /**
    * Process the UMIs, merging and aligning reads down to a single, high-quality concensus per UMI
    * val inputFileReads = args(0)
    * val outputFile = new PrintWriter(args(1))
@@ -853,7 +1037,7 @@ class DNAQC extends QScript {
    */
   // ********************************************************************************************************
   case class UMIProcessingPaired(inMergedReads1: File, inMergedReads2: File, outputFASTA1: File,
-    outputFASTA2: File, outputStats: File, umiCutOff: Int, primersFile: File, reference: File, sampleName: String, cutSites: File) extends CommandLineFunction with ExternalCommonArgs {
+    outputFASTA2: File, outputStats: File, outputUMIStats: File,umiCutOff: Int, primersFile: File, reference: File, sampleName: String, cutSites: File, usingUMI: Boolean) extends CommandLineFunction with ExternalCommonArgs {
 
     @Input(doc = "input reads (fwd)") var inReads1 = inMergedReads1
     @Input(doc = "input reads (rev)") var inReads2 = inMergedReads2
@@ -861,25 +1045,17 @@ class DNAQC extends QScript {
     @Output(doc = "output fasta for further alignment (fwd)") var outFASTA1 = outputFASTA1
     @Output(doc = "output fasta for further alignment (rev)") var outFASTA2 = outputFASTA2
     @Output(doc = "output statistics file for containing information about the UMI merging process") var outStat = outputStats
+    @Output(doc = "output statistics file of UMI merging process") var outUMIStat = outputUMIStats
     @Argument(doc = "how many UMIs do we need to initial have to consider merging them") var umiCut = umiCutOff
     @Argument(doc = "the primers file; one line per primer that we expect to have on each end of the resulting merged read") var primers = primersFile
     @Argument(doc = "the reference file") var ref = reference
     @Argument(doc = "the sample name") var sample = sampleName
+    @Argument(doc = "using UMI") var umied = usingUMI
 
-    //java -jar  /net/shendure/vol10/projects/CRISPR.lineage/nobackup/codebase/UMIMerge/target/scala-2.11/UMIMerge-assembly-1.0.jar
-    // --inputFileReads1 /net/shendure/vol10/projects/CRISPR.lineage/nobackup/2015_10_18_Full_TYR_sequencing/data/pipeline_output/TYR_gils/TYR_gils.barcodeSplit.fastq1.fq.gz
-    // --inputFileReads2 /net/shendure/vol10/projects/CRISPR.lineage/nobackup/2015_10_18_Full_TYR_sequencing/data/pipeline_output/TYR_gils/TYR_gils.barcodeSplit.fastq2.fq.gz
-    //--outputFastq1 TYR_gils.fwd.fq
-    //--outputFastq2 TYR_gils.rev.fq
-    //--cutSites /net/shendure/vol10/projects/CRISPR.lineage/nobackup/2015_10_18_Full_TYR_sequencing/data/TYRFull.fasta.cutSites
-    //--primersEachEnd /net/shendure/vol10/projects/CRISPR.lineage/nobackup/2015_10_18_Full_TYR_sequencing/data/TYRFull.fasta.primers
-    //--reference /net/shendure/vol10/projects/CRISPR.lineage/nobackup/2015_10_18_Full_TYR_sequencing/data/TYRFull.fasta
-    //--umiStart 0
-    //--umiLength 10
-    //--samplename TYR_gils
-    var cmdString = "scala -J-Xmx13g /net/shendure/vol10/projects/CRISPR.lineage/nobackup/codebase/UMIMerge/target/scala-2.11/UMIMerge-assembly-1.0.jar "
+    var cmdString = "scala -J-Xmx13g /net/shendure/vol10/projects/CRISPR.lineage/nobackup/bin/UMIMerge.jar "
     cmdString += " --inputFileReads1 " + inReads1 + " --inputFileReads2 " + inReads2 + " --outputFastq1 " + outFASTA1 + " --outputFastq2 " + outFASTA2 + " --outputStats "
-    cmdString += outStat + " --umiLength " + umiCut + " --primersEachEnd " + primers + " --reference " + ref + " --samplename " + sample + " --umiStart 0 --cutSites " + cutSiteFile
+    cmdString += outStat + " --umiLength " + umiCut + " --primersEachEnd " + primers + " --reference " + ref + " --samplename "
+    cmdString += sample + " --umiStart 0 --cutSites " + cutSiteFile + " --outputUMIStats " + outUMIStat
 
     var cmd = cmdString
 
@@ -893,39 +1069,38 @@ class DNAQC extends QScript {
     this.jobName = queueLogDir + outStat + ".umis"
   }
 
-  /**
-   * Process the UMIs, merging and aligning reads down to a single, high-quality concensus per UMI
-   * val inputFileReads = args(0)
-   * val outputFile = new PrintWriter(args(1))
-   * val outputStats = new PrintWriter(args(2))
-   * val umiCutoff = args(3).toInt
-   * val primersEachEnd = args(4)
-   * val reference = args(5)
-   */
-  // ********************************************************************************************************
-  case class UMIProcessing(inMergedReads: File, outputFASTA: File, outputStats: File, umiCutOff: Int, primersFile: File, reference: File, sampleName: String) extends CommandLineFunction with ExternalCommonArgs {
-    @Input(doc = "input reads") var inReads = inMergedReads
-    @Output(doc = "output fasta for further alignment") var outFASTA = outputFASTA
+  //--inputUnmerged --inputMerged --outputStats --cutSites --primersEachEnd --sample test
+  case class ReadsToStats(inputUnmerged: File,
+    inputMerged: File,
+    outputStats: File,
+    cutSites: File,
+    primersEachEnd: File,
+    sampleName: String) extends CommandLineFunction with ExternalCommonArgs {
+
+    @Input(doc = "input reads (fwd)") var unmerged = inputUnmerged
+    @Input(doc = "input reads (rev)") var merged = inputMerged
+    @Input(doc = "the cutsite locations") var cutSiteFile = cutSites
     @Output(doc = "output statistics file for containing information about the UMI merging process") var outStat = outputStats
-    @Argument(doc = "how many UMIs do we need to initial have to consider merging them") var umiCut = umiCutOff
-    @Argument(doc = "the primers file; one line per primer that we expect to have on each end of the resulting merged read") var primers = primersFile
-    @Argument(doc = "the reference file") var ref = reference
+    @Argument(doc = "the primers file; one line per primer that we expect to have on each end of the resulting merged read") var primers = primersEachEnd
     @Argument(doc = "the sample name") var sample = sampleName
 
-    var cmd = "scala -J-Xmx7g " + umiScript + " " + inReads + " " + outFASTA + " " + outStat + " " + umiCut + " " + primers + " " + ref + " " + sample
+    var cmdString = "java -jar -Xmx2g /net/shendure/vol10/projects/CRISPR.lineage/nobackup/bin/ReadToStats.jar "
+    cmdString += " --inputUnmerged " + inputUnmerged + " --inputMerged " + inputMerged + " --cutSites "
+    cmdString += cutSiteFile + " --outputStats "
+    cmdString += outStat + " --primersEachEnd " + primers + " --sample "
+    cmdString += sample
 
-    this.memoryLimit = 8
-    this.residentRequest = 8
-    this.residentLimit = 8
+    var cmd = cmdString
+
+    this.memoryLimit = 6
+    this.residentRequest = 6
+    this.residentLimit = 6
 
     def commandLine = cmd
     this.isIntermediate = false
-    this.analysisName = queueLogDir + outputFASTA + ".umis"
-    this.jobName = queueLogDir + outputFASTA + ".umis"
+    this.analysisName = queueLogDir + outStat + ".calls"
+    this.jobName = queueLogDir + outStat + ".calls"
   }
-
-
-
   /**
    * seqprep -- trimmomatic's main competition, does read merging as well
    *
@@ -946,7 +1121,7 @@ class DNAQC extends QScript {
     this.residentLimit = 4
 
     // o -> minimum overlap, n -> faction of bases that must match in overlap
-    var cmd = seqPrepPath + " -o 90 -f " + fqs(0) + " -r " + fqs(1) + " -1 " + fqOuts(0) + " -2 " + fqOuts(1) + " -s " + merged
+    var cmd = seqPrepPath + " -f " + fqs(0) + " -r " + fqs(1) + " -1 " + fqOuts(0) + " -2 " + fqOuts(1) + " -s " + merged
 
     def commandLine = cmd
     this.isIntermediate = false

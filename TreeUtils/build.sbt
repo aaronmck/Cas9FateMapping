@@ -1,6 +1,6 @@
 name := "TreeUtils"
 
-version := "1.0"
+version := "1.1"
 
 scalaVersion := "2.11.7"
 
@@ -14,7 +14,6 @@ libraryDependencies += "org.scalatest" % "scalatest_2.11" % "2.2.4" % "test"
 
 libraryDependencies += "org.scalatest" % "scalatest_2.11" % "2.2.4"
 
-libraryDependencies += "org.apache.commons" % "commons-math3" % "3.5"
 
 scalacOptions += "-target:jvm-1.7"
 

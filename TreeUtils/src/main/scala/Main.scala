@@ -69,8 +69,10 @@ object Main extends App {
     config: Config => {
 
       // load up the annotation manager
+      println("Loading annotation manager from your annotation file...")
       val annotManager = AnnotationManager(config.mappingFile.getAbsolutePath)
 
+      println("finding X% pure subtrees from your data...")
       findPureBranches(config.inputTree.getAbsolutePath,0.95, 0,annotManager, config.outputSubTrees.getAbsolutePath, 10000 )
 
       /*
@@ -107,12 +109,18 @@ object Main extends App {
     val tagToReadCount = new HashMap[String,Int]()
 
     val mappingFile = Source.fromFile(mappingFileName).getLines()
-    val header = mappingFile.next().split("\t")
+    val header = mappingFile.next().split("\t").zipWithIndex.map{case(tk,index) => (tk,index)}.toMap
+
+    if (!(header contains "taxa")) throw new IllegalStateException("Unable to find taxa in your header")
+    if (!(header contains "sample")) throw new IllegalStateException("Unable to find sample in your header")
+    if (!(header contains "count")) throw new IllegalStateException("Unable to find count in your header")
+    if (!(header contains "eventString")) throw new IllegalStateException("Unable to find eventString in your header")
+
     mappingFile.foreach{line => {
       val sp = line.split("\t")
-      nodeNameToGroup(sp(0)) = sp(2)
-      nodeNameToReads(sp(0)) = sp(4).toInt
-      nodeSamplesToReads(sp(2)) = nodeSamplesToReads.getOrElse(sp(2),0) + sp(4).toInt
+      nodeNameToGroup(sp(0)) = sp(header("sample"))
+      nodeNameToReads(sp(0)) = sp(header("count")).toInt
+      nodeSamplesToReads(sp(header("sample"))) = nodeSamplesToReads.getOrElse(sp(header("sample")),0) + nodeNameToReads(sp(0))
     }}
 
     nodeSamplesToReads.foreach{case(tag,reads) => {
@@ -173,13 +181,14 @@ object Main extends App {
     purityOverTree(treeParser.getRoot,propCutoff,minNodes,annotManager,outputFile,false)
 
     // let's do 100 simulations
-    (0 until numberOfSimulatedTrees)foreach {index => {
+    /*(0 until numberOfSimulatedTrees)foreach {index => {
       val treeParser = new TreeParser(Source.fromFile(treeFile).getLines().mkString(""), false, true, isLabeled, 1)
 
       val root = treeParser.getRoot
       val newRoot = permuteTreeLabels(root)
       purityOverTree(newRoot,propCutoff,minNodes,annotManager,outputFile,true)
     }}
+    */
     outputFile.close()
   }
 
@@ -226,7 +235,7 @@ object Main extends App {
    * @param minNodes the min number of nodes required to find a valid subtree
    * @param annotManager all of our annotations for this tree
    * @param output a place to print successful subtrees
-   * @return
+   * @return which subtree label was the max, the size of the leaf nodes below this node, and the proportion of the max label
    */
   def determineSubtreePurity (node: Node,
                               propCutoff: Double,

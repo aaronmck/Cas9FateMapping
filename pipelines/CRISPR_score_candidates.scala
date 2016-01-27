@@ -6,7 +6,7 @@
   * bash/shell profile
   *
   *
-  * Copyright (c) 2014, aaronmck
+  * Copyright (c) 2015, aaronmck
   * All rights reserved.
   *
   * Redistribution and use in source and binary forms, with or without
@@ -53,7 +53,12 @@ import scala.collection.immutable._
 import java.io._
 
 /**
- * Quality control sequencing data and optionally align the data to the genome
+ * give a BED file containing sites in a genome of interest, find off-target hits, and score each
+ * guide for it's on and off target abilities.
+ *
+ * The input file:
+ *
+ * A bed file, where the 4th column (usually a name or something) with the target sequence
  **/
 class ScoreGuides extends QScript {
   qscript =>
@@ -73,22 +78,13 @@ class ScoreGuides extends QScript {
     * ************************************************************************** */
 
   @Input(doc = "The path to the tools that compares each guide against the reference and tallies hits", fullName = "tally", shortName = "tally", required = false)
-  var tallyScript: File = new File("/net/shendure/vol10/projects/CRISPR.lineage/nobackup/codebase/scripts/try_full_scan.scala")
-
-  @Input(doc = "The script that takes the tallied events and scores them with on and off target scores", fullName = "score", shortName = "score", required = false)
-  var scoringScript: File = "/net/shendure/vol10/projects/CRISPR.lineage/nobackup/codebase/../codebase/scripts/score_sites.py"
-
-  @Input(doc = "A bed file containing ALL targets in the genome", fullName = "alltargets", shortName = "alltargets", required = true)
-  var allTargets: File = ""
+  var tallyJar: File = new File("/net/gs/vol1/home/aaronmck/source/DeepFry/target/scala-2.11/CRISPREngineered-assembly-1.0.jar ")
 
   @Input(doc = "a temporary location to write intermediate files", fullName = "temp", shortName = "temp", required = true)
   var tmp: File = "/tmp/"
 
-  @Input(doc = "a script to join the score files", fullName = "join", shortName = "join", required = false)
-  var joinScores: File = "/net/shendure/vol10/projects/CRISPR.lineage/nobackup/codebase/../codebase/scripts/join_sites.py"
-
-  @Input(doc = "the reference to scan against", fullName = "reference", shortName = "ref", required = false)
-  var reference: File = "/net/shendure/vol10/nobackup/shared/genomes/human_g1k_hs37d5/hs37d5.fa"
+  @Input(doc = "the reference to scan against, split up into bins of potential off-targets", fullName = "refBed", shortName = "ref", required = false)
+  var genomeFile: File = "/net/shendure/vol10/projects/CRISPR.lineage/nobackup/2015_07_30_GenomeScans/data/human_bins/global.unique.txt.gz"
 
   @Output(doc = "the output file of scored events", fullName = "output", shortName = "output", required = true)
   var outputFile: File = ""
@@ -121,7 +117,7 @@ class ScoreGuides extends QScript {
         collectionOfBedEvents.foreach{evtString => eventsOutput.write(evtString + "\n")}
         eventsOutput.close()
 
-        add(FindCandidates(inpF,outF))
+        add(FindCandidates(inpF,outF, genomeFile))
       }}
 
       var totalOutput = List[File]()
@@ -156,23 +152,31 @@ class ScoreGuides extends QScript {
 
 
   // ********************************************************************************************************
-  case class FindCandidates(inputTargets: File, candidateList: File) extends ExternalCommonArgs {
+  case class FindCandidates(inputTargets: File, candidateList: File, genomeBed: File) extends ExternalCommonArgs {
     @Input(doc = "the input target file")      var input = inputTargets
+    @Input(doc = "the genome bed file")        var gBed = genomeBed
     @Output(doc = "the output file to write ") var output = candidateList
 
-    def commandLine = "scala " + tallyScript + " " + input + " " + output + " " + reference
+    def commandLine = "java -Xmx3g -jar " + tallyJar + " --analysis tally --targetBed " + input + " --output " + output + " --genomeBed " + gBed
 
     this.analysisName = queueLogDir + output + ".gather"
     this.jobName = queueLogDir + output + ".gather"
     this.memoryLimit = 4
+
+    /*
+    --analysis tally \
+    --targetBed /net/shendure/vol10/projects/CRISPR.lineage/nobackup/2015_07_30_GenomeScans/data/all3_target_set_nh.bed \
+    --output /net/shendure/vol10/projects/CRISPR.lineage/nobackup/2015_07_30_GenomeScans/data/50K_scores_every_interation_guide_only_zebafish.bed \
+    --genomeBed /net/shendure/vol10/projects/CRISPR.lineage/nobackup/2015_07_30_GenomeScans/data/fish_bins/global.unique.txt.gz &
+    */
   }
 
   // ********************************************************************************************************
-  case class ScoreCandidates(inputTargets: File, scoredFile: File) extends ExternalCommonArgs {
-    @Input(doc = "the input target file")      var input = inputTargets
-    @Output(doc = "the output file to write ") var output = scoredFile
+  case class ScoreCandidates(inputRawOTs: File, scoredBed: File) extends ExternalCommonArgs {
+    @Input(doc = "the input target file")      var input = inputRawOTs
+    @Output(doc = "the output file to write ") var output = scoredBed
 
-    def commandLine = "python " + scoringScript + " --input_sites " + input + " --output_sites " + output
+    def commandLine = "java -Xmx3g -jar " + tallyJar + " --analysis score --inputBed " + input + " --outputBed " + output
 
     this.analysisName = queueLogDir + output + ".score"
     this.jobName = queueLogDir + output + ".score"
@@ -184,7 +188,7 @@ class ScoreGuides extends QScript {
     @Input(doc = "the input score files")      var inputFiles = inputScores
     @Output(doc = "the output file to write ") var output = finalScoredFile
 
-    def commandLine = "python " + joinScores + " " + inputFiles.map{inF => " --input " + inF}.mkString("") + " --output " + output
+    def commandLine = "cat " + inputFiles.mkString(" ") + " > " + output
 
     this.analysisName = queueLogDir + output + ".finalScores"
     this.jobName = queueLogDir + output + ".finalScores"

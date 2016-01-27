@@ -56,6 +56,8 @@ val perBaseMatches    = new HashMap[Int,Int]()
 
 val eventToCount = new HashMap[String,Int]()
 val eventToCigar = new HashMap[String,String]()
+val lengthsToCount = new HashMap[String,Int]()
+val lengthsToCigar = new HashMap[String,String]()
 
 val plotTopXreads = 100
 
@@ -63,11 +65,14 @@ val matchTag = 0
 val deletionTag = 1
 val insertionTag = 2
 
+// event data container
+case class EventData(start: Int, stop: Int, eventType: Int, eventBases: String)
+
 /**
- * take event strings and split the data on the pluses
+ * take event strings and split the data on the pluses, returning a tuple of the 
 **/
-def eventSplit(event:String): Array[Tuple3[Int,Int,Int]] = {
-  var returnArray = Array[Tuple3[Int,Int,Int]]()
+def eventSplit(event:String): Array[EventData] = {
+  var returnArray = Array[EventData]()
 
   var rawArray = Array[String](event)
 
@@ -80,13 +85,13 @@ def eventSplit(event:String): Array[Tuple3[Int,Int,Int]] = {
     if (evtsplit.size > 1) {
       var position = evtsplit(1).toInt - startPosition
       var length = evtsplit(0).slice(0,evtsplit(0).length - 1).toInt
-
+      
       val evtChar = evtsplit(0)(evtsplit(0).length - 1)
       if (evtChar == 'I') {
         //println(evtsplit.mkString("-"))
-        returnArray :+= (position,position,insertionTag)
+        returnArray :+= EventData(position,position,insertionTag, evtsplit(2))
       } else if (evtChar == 'D')
-        returnArray :+= (position,position+length,deletionTag)
+        returnArray :+= EventData(position,position+length,deletionTag,("-" * length).toString)
       else
         println("FAILED on " + evtsplit(0)(evtsplit(0).length - 1))
     }
@@ -96,51 +101,68 @@ def eventSplit(event:String): Array[Tuple3[Int,Int,Int]] = {
 
 // for each line in the stats file, find the events, mark them on an array of events.
 var totalReads = 0
+case class EventBase(event: Int, base: String) {
+  def toPairStr = event + "," + base
+}
 statsFile.foreach{line => {
   if ((line contains "PASS") && !(line contains "WT") && !(line contains "UNKNOWN")) {
-      totalReads += 1
-      val sp = line.split("\t")
-      val arrayPositions = new Array[Int]((endPosition - startPosition) + 1)
+    totalReads += 1
+    val sp = line.split("\t")
 
-      var eventIntervals = Array[Tuple3[Int,Int,Int]]()
+    
+    val typeOfEventPerPosition = new Array[EventBase]((endPosition - startPosition) + 1)
+    val lengthOfEventPerPosition = new Array[Int]((endPosition - startPosition) + 1)
 
-      val events = targetToIndex.foreach{case(target,index) =>
-        val eps = eventSplit(sp(index))
+    var eventIntervals = Array[EventData]()
 
-        if (eps.size > 0) {
-          eventIntervals = eventIntervals ++ eps
+    val events = targetToIndex.foreach{case(target,index) =>
+      val eps = eventSplit(sp(index))
+
+      if (eps.size > 0) {
+        eventIntervals = eventIntervals ++ eps
         }
-      }
+    }
 
-      //println(eventIntervals.mkString("--"))
-      eventIntervals.foreach{interval =>
-        //println(interval._1 + "\t" + interval._2 + "\t" + interval._3)
-        (interval._1 until (interval._2 + 1)).foreach{indx => {
-          if (indx >= 0 && indx < arrayPositions.size)
-            arrayPositions(indx) = interval._3
+    // flatten the events to a perbase signature -- include the base now to avoid the weird issue we hit earlier
+    eventIntervals.foreach{interval => {
+      var baseIndex = 0
+      (interval.start until (interval.stop + 1)).foreach{indx => {
+          if (indx >= 0 && indx < typeOfEventPerPosition.size) {
+            typeOfEventPerPosition(indx) = EventBase(interval.eventType, interval.eventBases.slice(baseIndex,baseIndex+1))
+            baseIndex += 1
+            lengthOfEventPerPosition(indx) = interval.eventBases.length
           }
-        }}
-
-      arrayPositions.zipWithIndex.foreach{case(tag,ind) => {
-        //println("TAG:" + tag + "\t" + ind)
-        if (tag == matchTag)
-          perBaseMatches(ind) = perBaseMatches.getOrElse(ind,0) + 1
-        if (tag == deletionTag)
-          perBaseDeletions(ind) = perBaseDeletions.getOrElse(ind,0) + 1
-        if (tag == insertionTag)
-          perBaseInsertions(ind) = perBaseInsertions.getOrElse(ind,0) + 1
+      }
+      }
       }}
 
-      val eventString = arrayPositions.mkString("")
-      //println(eventString)
-      eventToCount(eventString) = eventToCount.getOrElse(eventString,0) + 1
-      eventToCigar(eventString) = targetToIndex.map{case(target,index) => sp(index)}.mkString("_")
-    }
+    // figure out the per-base insertions and deletion rates for the histogram
+    typeOfEventPerPosition.zipWithIndex.foreach{case(typePlusBase,ind) => {
+      if (typePlusBase.event == deletionTag)
+        perBaseDeletions(ind) = perBaseDeletions.getOrElse(ind,0) + 1
+      if (typePlusBase.event == insertionTag)
+        perBaseInsertions(ind) = perBaseInsertions.getOrElse(ind,0) + 1
+    }}
+
+    val eventString = typeOfEventPerPosition.map{tk => tk.toPairStr}.mkString("_")
+    val eventSizes = lengthOfEventPerPosition.mkString(",")
+
+    //println(eventString)
+    eventToCount(eventString) = eventToCount.getOrElse(eventString,0) + 1
+    eventToCigar(eventString) = targetToIndex.map{case(target,index) => sp(index)}.mkString("_")
+
+    lengthsToCount(eventSizes) = eventToCount.getOrElse(eventSizes,0) + 1
+    lengthsToCigar(eventSizes) = targetToIndex.map{case(target,index) => sp(index)}.mkString("_")
+  }
 }}
 
 
 val allEvents = eventToCount.toSeq.sortBy(_._2).toArray
 val topEvents = allEvents.slice(allEvents.size - plotTopXreads,allEvents.size).reverse
+
+val allLengths = lengthsToCount.toSeq.sortBy(_._2).toArray
+val topLengths = allLengths.slice(allLengths.size - plotTopXreads,allLengths.size).reverse
+
 def toPct(count: Int): Double = (count.toDouble / totalReads.toDouble)
 
 allEventsF.write("event\tarray\tcount\tproportion\n")
@@ -150,15 +172,18 @@ allEvents.zipWithIndex.foreach{case((str,count),index) => {
 allEventsF.close()
 
 
-occurances.write("array\tposition\tevent\n")
+occurances.write("array\tposition\tevent\tinsertSize\n")
 readCounts.write("event\tarray\tproportion\trawCount\tWT\n")
 
 topEvents.zipWithIndex.foreach{case((str,count),index) => {
   val isAllWT = eventToCigar(str).split("_").map{sat => if (sat == "NONE") 0 else 1}.sum == 0
   val outWT = if (isAllWT) 1 else 2
   readCounts.write(eventToCigar(str) + "\t" + index + "\t" + toPct(count) + "\t" + count + "\t" + outWT + "\n")
-  str.zipWithIndex.foreach{case(evt,subIndex) =>
-    occurances.write(index + "\t" + subIndex + "\t" + evt + "\n")
+
+  //println(topLengths(index)._1)
+  val sizes = topLengths(index)._1.split(",").map{tg => tg.toInt}.toArray
+  str.split("_").zipWithIndex.foreach{case(evt,subIndex) =>
+    occurances.write(index + "\t" + subIndex + "\t" + evt.split(",")(0) + "\t" + sizes(subIndex) + "\n")
   }
 }}
 occurances.close()
