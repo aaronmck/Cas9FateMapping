@@ -14,7 +14,7 @@ import scala.sys.process._
 
 
 /**
- * a simple case class to hold alignments -- results we get back from parsing reads aligned with MAFFTv7
+ * a simple case class to hold alignments -- results we get back from parsing reads aligned with MAFFTv7 or other aligners
  * @param refPos the reference position for the start of the event
  * @param refBase the reference bases over the event
  * @param readBase the read bases over the event
@@ -36,6 +36,8 @@ case class Alignment(val refPos: Int, refBase: String, readBase: String, cigarCh
       ""
     }
   }
+
+  def pctBasesMatching(): Double = refBase.toUpperCase.zip(readBase.toUpperCase).map{case(b1,b2) => if (b1 == b2) 1 else 0}.sum / refBase.length.toDouble
 }
 
 object AlignmentManager {
@@ -118,22 +120,26 @@ object AlignmentManager {
   }
 
   /**
-   * filter the alignments, if we have poor matches on the ends that allow us to accept and indel, roll it back until we've matched enough bases
+   * filter the alignments, when we have poor matches on the ends that allow us to accept and indel, peel back alignments until we've matched enough bases
    * @param eventList the list of alignments over the read
    * @param minMatch the minimum number of match bases to 'anchor' the ends, otherwise strip the trash off
    * @return a filtered alignment set
    */
-  def filterEnds(eventList: List[Alignment], minMatch: Int, debugInfo: Boolean = false): List[Alignment] = {
+  def filterEnds(eventList: List[Alignment], minMatch: Int, debugInfo: Boolean = false, matchingBasePCT: Double = 0.60): List[Alignment] = {
 
-    // make this as clear as possible
+    // first the first and last alignments that have at least X bases matched that aren't Ns
     var firstIndex = -1
     for (i <- 0 until eventList.size)
-      if (firstIndex < 0 && eventList(i).cigarCharacter == "M" && eventList(i).readBase.length >= minMatch)
+      if (firstIndex < 0 && eventList(i).cigarCharacter == "M" &&  // have to be a match
+        eventList(i).pctBasesMatching > matchingBasePCT &&  // and have over 60% of the bases match
+        (eventList(i).readBase.length - eventList(i).refBase.count(p => p == 'N')) >= minMatch) // and meet the minimum length, not counting Ns
         firstIndex = i
 
     var lastIndex = -1
     for (i <- (eventList.size - 1).until(-1, -1))
-      if (lastIndex < 0 && eventList(i).cigarCharacter == "M" && eventList(i).readBase.length >= minMatch)
+      if (lastIndex < 0 && eventList(i).cigarCharacter == "M" && // have to be a match
+        eventList(i).pctBasesMatching > matchingBasePCT && // and have over 60% of the bases match
+        (eventList(i).readBase.length  - eventList(i).refBase.count(p => p == 'N')) >= minMatch) // and meet the minimum length, not counting Ns
         lastIndex = i
 
     if (debugInfo) {

@@ -30,4 +30,3 @@ mainClass in (Compile, packageBin) := Some("main.scala.UMIProcessing")
 // change Compile to Test to set it for 'test:run'
 //mainClass in (Compile, run) := Some("main.scala.DeepSeq")
 mainClass in (Compile, run) := Some("main.scala.UMIProcessing")
-//scalaHome := Some(file("/Users/aaronmck/scala-2.10.3/"))

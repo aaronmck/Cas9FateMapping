@@ -53,7 +53,7 @@ class AlignmentManagerTest extends FlatSpec with Matchers {
   }
 
   "A MAFFT" should "find multi-deletions correctly" in {
-    val ref =     "AAATAAAAT"
+    val ref =     "AAAAAAAAA"
     val readFwd = "--AA---AA"
     val cutSites = CutSites.fromIntervals(Array[Tuple3[Int,Int,Int]]((3,5,7)))
     val testCalls = AlignmentManager.callEdits(ref,readFwd,1,cutSites)
@@ -61,7 +61,7 @@ class AlignmentManagerTest extends FlatSpec with Matchers {
 
     testCalls._1(0).cigarCharacter should be ("M")
     testCalls._1(0).readBase should be ("AA")
-    testCalls._1(0).refBase should be ("AT")
+    testCalls._1(0).refBase should be ("AA")
     testCalls._1(0).refPos should be (2)
 
     testCalls._1(1).cigarCharacter should be ("D")
@@ -71,7 +71,7 @@ class AlignmentManagerTest extends FlatSpec with Matchers {
 
     testCalls._1(2).cigarCharacter should be ("M")
     testCalls._1(2).readBase should be ("AA")
-    testCalls._1(2).refBase should be ("AT")
+    testCalls._1(2).refBase should be ("AA")
     testCalls._1(2).refPos should be (7)
   }
 
@@ -112,10 +112,10 @@ class AlignmentManagerTest extends FlatSpec with Matchers {
   }
 
   "A MAFFT" should "merge an event and a non-event correctly" in {
-    val ref1 =     "AAATAAAAA"
+    val ref1 =     "AAAATAAAA"
     val readFwd1 = "AAAATAAAA"
 
-    val ref2 =     "AAATAAAAA"
+    val ref2 =     "AAAATAAAA"
     val readFwd2 = "AAAAT-AAA"
 
     val cutSites = CutSites.fromIntervals(Array[Tuple3[Int,Int,Int]]((3,5,7)))
@@ -131,11 +131,11 @@ class AlignmentManagerTest extends FlatSpec with Matchers {
   }
 
   "A MAFFT" should "merge an dual-event and a non-event correctly" in {
-    val ref1 =     "AAATAAAAAAAATAAAAA"
-    val readFwd1 = "AAAATAAAAAAAATAAAA"
+    val ref1 =     "AAAATAAAAAAATAAAAA"
+    val readFwd1 = "AAAATAAAAAAATTAAAA"
 
     //              012345678901234567
-    val ref2 =     "AAATAAAAAAAATAAAAA"
+    val ref2 =     "AAAATAAAAAAAATAAAA"
     val readFwd2 = "AAAAT-AAAAAAAT--AA"
 
     val cutSites = CutSites.fromIntervals(Array[Tuple3[Int,Int,Int]]((3,5,7),(12,14,16)))
@@ -175,11 +175,11 @@ class AlignmentManagerTest extends FlatSpec with Matchers {
 
 
   "A MAFFT" should "merge an a collision correctly" in {
-    val ref1 =     "AAATAAAAAAAATAAAAA"
+    val ref1 =     "AAAATAAAAAAAATAAAA"
     val readFwd1 = "AAAAT-AAAAAAAT--AA"
 
     //              012345678901234567
-    val ref2 =     "AAATAAAAAAAATAAAAA"
+    val ref2 =     "AAAATAAAAAAAATAAAA"
     val readFwd2 = "AAAAT-AAAAAAAT--AA"
 
     val cutSites = CutSites.fromIntervals(Array[Tuple3[Int,Int,Int]]((3,5,7),(12,14,16)))
