@@ -5,6 +5,7 @@ parser.add_argument('--stats', help='the stats file to load', required=True)
 parser.add_argument('--fasta', help='the fasta file with ', required=True)
 parser.add_argument('--cutsites', help='the cutsites file', required=True)
 parser.add_argument('--read', help='the UMI to pull out', required=True)
+parser.add_argument('--paired', help='the fasta is a paired read', action='store_true')
 args = parser.parse_args()
 
 # ---------------------------------------------------------------
@@ -54,7 +55,10 @@ def findReadAndReferenceString(inputFile, targetRead):
                 
     raise Exception('Unable to find read: ' + targetRead)
 
-(refString,readString) = findReadAndReferenceString(args.fasta,args.read)
+read_to_find = args.read
+if args.paired:
+    read_to_find = read_to_find + "_1"
+(refString,readString) = findReadAndReferenceString(args.fasta,read_to_find)
 
 # ---------------------------------------------------------------
 # load up the cutsites
@@ -104,3 +108,40 @@ print "\nreference, read1 (or merged), and cutsites:"
 print refString
 print newReadString
 print cutString
+
+if args.paired:
+    read_to_find = args.read + "_2"
+    (refString,readString) = findReadAndReferenceString(args.fasta,read_to_find)
+
+    cut_sites = []
+    cut_file = open(args.cutsites)
+    header = cut_file.readline()
+    for line in cut_file:
+        cut_sites.append(int(line.strip("\n").split("\t")[2]))
+        
+        refLength = len(refString)
+        
+        cutString = ""
+        refIndex = 0
+        newReadString = ""
+        
+        for i in range(0,refLength):
+            if refString[i] != '-':
+                refIndex += 1
+            if refIndex in cut_sites:
+                cutString += "^"
+            else:
+                cutString += "_"
+                
+            if refString[i] != '-' and readString[i] != '-':
+                if refString[i] == readString[i]:
+                    newReadString += str(readString[i]).upper()
+                else:
+                    newReadString += str(readString[i]).lower()
+            else:
+                newReadString += str(readString[i])
+
+    print "\nreference, read1 (or merged), and cutsites:"
+    print refString
+    print newReadString
+    print cutString
