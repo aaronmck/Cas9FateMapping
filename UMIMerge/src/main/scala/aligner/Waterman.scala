@@ -118,8 +118,8 @@ object Waterman extends Aligner {
       //println("read     : " + readStrings(0))
     }
 
-    //tmp.delete()
-    //tmp2.delete()
+    tmp.delete()
+    tmp2.delete()
     return ret
   }
 }
