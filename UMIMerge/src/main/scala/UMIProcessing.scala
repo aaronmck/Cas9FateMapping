@@ -197,7 +197,7 @@ object UMIProcessing extends App {
     val umiReadsRVSReplacementsCounts = new mutable.HashMap[String, Int]()
 
     val downsampleSize = 40
-    val minReads = 10
+    val minReads = 5
     var tooFewReadsUMI = 0
     var downsampledUMI = 0
     var justRightUMI = 0

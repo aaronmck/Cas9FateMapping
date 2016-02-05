@@ -143,7 +143,7 @@ object DeepSeq extends App {
 
     val callEvents = AlignmentManager.cutSiteEvent(mergedRead, cutsSiteObj)
 
-    val pass = (containsFwdPrimer && containsRevPrimer && callEvents.matchingRate > .90 && callEvents.matchingBaseCount> 50 && !(callEvents.alignments.mkString("\t") contains "WT_"))
+    val pass = (containsFwdPrimer && containsRevPrimer && callEvents.matchingRate > .85 && callEvents.matchingBaseCount> 50 && !(callEvents.alignments.mkString("") contains "WT_"))
 
     outputStatsFile.outputStatEntry(StatsContainer(mergedRead.read.name, pass, containsFwdPrimer, containsRevPrimer,
       false, true, baseLen, -1, 1, 1, callEvents.matchingRate, -1.0, callEvents.matchingBaseCount, -1,
@@ -172,8 +172,8 @@ object DeepSeq extends App {
     val callEvents = AlignmentManager.cutSiteEventsPair(readPairs.pair1, readPairs.pair2, cutsSiteObj)
 
     val pass = containsFwdPrimer && containsRevPrimer &&
-      callEvents.matchingRate1 > .90 && callEvents.matchingRate2 > .90 &&
-      callEvents.matchingBaseCount1 > 50 && callEvents.matchingBaseCount2 > 50 &&
+      callEvents.matchingRate1 > .85 && callEvents.matchingRate2 > .85 &&
+      callEvents.matchingBaseCount1 > 25 && callEvents.matchingBaseCount2 > 25 &&
       !(callEvents.alignments.mkString("") contains "WT_")
 
     outputStatsFile.outputStatEntry(StatsContainer(readPairs.pair1.read.name, pass, containsFwdPrimer, containsRevPrimer,

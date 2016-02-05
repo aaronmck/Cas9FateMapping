@@ -143,8 +143,8 @@ object UMIMerger {
   def getFailureStatus(readsKept: Double, fwdMatchBase: Double, revMatchBase: Option[Double], fwdPrimer: Boolean, revPrimer: Boolean): String = {
     var failureReason = ""
     if (readsKept < 0.5) failureReason += "notEnoughReadsRemaining;"
-    if (fwdMatchBase < 0.9) failureReason += "tooManyForwardMismatches;"
-    if (revMatchBase.getOrElse(1.0) < 0.9) failureReason += "tooManyForwardMismatches;"
+    if (fwdMatchBase < 0.85) failureReason += "tooManyForwardMismatches;"
+    if (revMatchBase.getOrElse(1.0) < 0.85) failureReason += "tooManyForwardMismatches;"
     if (!fwdPrimer) failureReason += "forwardPrimerMissing;"
     if (!revPrimer) failureReason += "reversePrimerMissing;"
 
