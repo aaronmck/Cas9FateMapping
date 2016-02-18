@@ -13,7 +13,7 @@ var numberToType = {"0": "match", "1": "deletion", "2": "insertion"};
 // sizes for various bounding boxes
 var global_width = 800;
 var global_height = 100;
-var heat_height = 800;
+var heat_height = 400;
 var margin_left = 80;
 var right_histo_width = 200;
 
@@ -32,12 +32,16 @@ var maxValue = mutation_values.length;
 var xScaleIsLog = true
 var topScaleIsLog = false
 occurance_data = ""
+read_block_data = ""
 
 // constant for the maximum height of a row in the heatmap and corresponding righthand barchart
 var maxReadHeight = 15
 
 // to give the plots on the bottom a cleaner look, crop the bar sizes to a proportion of their total height (to give white boundries between)
 var cropHeightProp = 0.8
+
+// plot up to this many HMID reads on the plot
+var topHMIDs = 10
 
 
 // from http://bl.ocks.org/mbostock/7621155
@@ -100,6 +104,7 @@ d3.tsv(cut_site_file, function (error, data) {
 	redrawTheTopHistgram()
     }    
 })
+
 
 function redrawTheTopHistgram() {
     // make a new data set where we melt down the mutations -- effectively like melt in R
@@ -201,7 +206,7 @@ function redrawTheTopHistgram() {
             return xEvents(4) - xEvents(0)
         })
         .attr('height', global_height)
-        .attr("fill-opacity", .4)
+        .attr("fill-opacity", .6)
         .attr("fill", "gray")
 	.attr("stroke", "#888888")
 
@@ -246,7 +251,7 @@ function redrawTheTopHistgram() {
         .attr("anchor", "right")
         .call(yAxis)
 
-    var legendText = "Editing percentage"
+    var legendText = "Editing (%)"
 
     //var zero = d3.round(
     // if we're logged we need to adjust the legend text and manualy remove a bunch of labels /ticks from the y axis
@@ -277,7 +282,7 @@ function redrawTheTopHistgram() {
             return 10;
         })
         .attr("text-anchor", "left")
-        .style("font-size", "12px")
+        .style("font-size", "18px")
         .text(legendText)
         .attr("transform", "rotate(-90)");
 }; 
@@ -304,13 +309,16 @@ function changeHistogram() {
 // ************************************************************************************************************
 function redrawHistogram() {
 
+    var local_occur_data = occurance_data.filter(function(d){ return +d.array <= topHMIDs; })
+
+    
     // find the maximum number of reads
-    var readCount = d3.max(occurance_data.map(function (d) {return +d.array;})) + 1;
+    var readCount = d3.max(local_occur_data.map(function (d) {return +d.array;})) + 1;
     var gridHeight = Math.min(maxReadHeight, parseInt(heat_height / readCount));
     var totalHistoHeight = gridHeight * readCount
     
     formatter = d3.format("2");
-    var yScale = d3.scale.ordinal().domain(occurance_data.map(function (d) {
+    var yScale = d3.scale.ordinal().domain(local_occur_data.map(function (d) {
         return d.array;
     })).rangeBands([0, totalHistoHeight]);
     
@@ -320,20 +328,20 @@ function redrawHistogram() {
 
     // are we using linear or log scales? setup the axis either way
     // --------------------------------------------------------------------------------
-    prescale = d3.scale.linear().domain([0, d3.max(occurance_data, function (d) {
+    prescale = d3.scale.linear().domain([0, d3.max(local_occur_data, function (d) {
         return +d.rawCount
     })]).range([0, 150]).nice();
 
     var xAxis = d3.svg.axis().scale(prescale).orient("top")
     if (xScaleIsLog) {
-        var maxVal = d3.max(occurance_data, function (d) {return +d.rawCount})
-        var minVal = d3.min(occurance_data, function (d) {return +d.rawCount})
+        var maxVal = d3.max(local_occur_data, function (d) {return +d.rawCount})
+        var minVal = d3.min(local_occur_data, function (d) {return +d.rawCount})
         prescale = d3.scale.log().domain([minVal, maxVal]).range([0, 150]).nice();
         xAxis = d3.svg.axis().scale(prescale).orient("top").tickSize(6); // .tickFormat(function(d) { return "10" + formatPower(Math.round(Math.log(d))); });
     }
 
     var mutbox2 = svgHeatRight.selectAll(".bar")
-        .data(occurance_data)
+        .data(local_occur_data)
         .enter().append("svg:g")
         .attr("class", "cause")
         .style("fill", function (d, i) {
@@ -346,7 +354,7 @@ function redrawHistogram() {
     var wt_colors = ['#000000', '#00FF00', '#555555', '#117202', '#333333'];
 
     mutbox2.selectAll(".bar")
-        .data(occurance_data)
+        .data(local_occur_data)
         .enter().append("rect")
         .attr("class", "bar")
         .attr("x", function (d) {
@@ -406,13 +414,13 @@ function redrawHistogram() {
         })
         .attr("y", function (d) {
             if (xScaleIsLog) {
-                return global_height - 50;
+                return global_height - 70;
             } else {
                 return global_height - 90;
             }
         })
         .attr("text-anchor", "left")
-        .style("font-size", "12px")
+        .style("font-size", "18px")
         .text("Number of HMIDs");
 
 }
@@ -422,57 +430,65 @@ d3.tsv(occurance_file, function (error, data) {
     redrawHistogram();
 });
 
-
 // ************************************************************************************************************
 // read plots -- add a block for each of the high frequency reads we observe
 // ************************************************************************************************************
 d3.tsv(top_read_melted_to_base, function (error, data) {
-    var readCount = parseInt(d3.max(data, function (d) {
+    read_block_data = data
+    redraw_read_block();
+});
+
+
+function redraw_read_block() {
+    var local_rbd = read_block_data.filter(function(d){ return +d.array <= topHMIDs; })
+    
+    var readCount = parseInt(d3.max(local_rbd , function (d) {
         return +d.array;
     })) + 1;
     var gridHeight = Math.min(maxReadHeight, parseInt(heat_height / readCount));
     var totalHeatHeight = gridHeight * readCount
 
+    var maxVal = endPos // d3.max(local_rbd , function (d) {return +d.length})
+    var minVal = startPos // d3.min(local_rbd , function (d) {return +d.position})
     
     // the scales and axis for the heatmap data
-    var yScale = d3.scale.ordinal().domain(data.map(function (d) {
+    var yScale = d3.scale.ordinal().domain(local_rbd.map(function (d) {
         return +d.array;
     })).rangeBands([0, totalHeatHeight]);
     
-    var xScale = d3.scale.ordinal().domain(data.map(function (d) {
-        return +d.position;
-    })).rangeBands([margin_left, global_width]);
+    var xScale = d3.scale.linear().domain([minVal,maxVal]).range([margin_left, global_width]);
+    var maxXPlot = xScale(maxVal)
 
     var dmt = xScale.domain().length;
     var gridWidth = parseInt((global_width - margin_left) / dmt);
-    var readCount = parseInt(d3.max(data, function (d) {
+    var readCount = parseInt(d3.max(local_rbd, function (d) {
         return +d.array;
     })) + 1;
     var gridOffset = parseInt(gridWidth + (gridWidth / 2));
-    var max = d3.entries(data).sort(function (a, b) {
+    var max = d3.entries(local_rbd ).sort(function (a, b) {
             return d3.descending(+a.value.position, +b.value.position);
         }
     )[0].value.position;
 
-    var min = d3.entries(data).sort(function (a, b) {
+    var min = d3.entries(local_rbd ).sort(function (a, b) {
             return d3.ascending(+a.value.position, +b.value.position);
         }
     )[0].value.position;
 
     var heatMap = svgHeat.selectAll(".heatmap")
-        .data(data)
+        .data(local_rbd )
         .enter().append("svg:rect")
         .attr("x", function (d, i) {
-            return xScale(+d.position);
+            return xScale(+d.position)
         })
         .attr("y", function (d, i) {
             return yScale(+d.array) + ((1.0 - cropHeightProp) * gridHeight)
         })
         .attr("width", function (d) {
-	    if (+d.event != 2) {
-		return gridWidth * 1.5; // 1* this is a hack, explained at the end of the file
+	    if (xScale(+d.position) + xScale(((+d.length) - (+d.position))) > maxXPlot) {
+		return maxXPlot - (xScale(+d.position));
 	    } else {
-		return gridWidth * 1.5; // * +d.insertSize;
+		return xScale((+d.length) - (+d.position) + minVal) - xScale(minVal);
 	    }
         })
         .attr("height", function (d) {
@@ -482,10 +498,27 @@ d3.tsv(top_read_melted_to_base, function (error, data) {
             return heatmap_colors[+d.event];
         })
 
-});
+};
 
-/* hacks explained:
-   1*: the bigger problem here is that we can't use rangeRoundBands because the outside padding looks really bad when we
-   have variable target counts across the plots. So we have to use rangeBands, which leads to anti-aliasing problems with
-   the bars.  We use this multiplier to make the deletions and insertions seem like blocks and not individual bases
-*/
+function changeSelection() {
+    var e = document.getElementById("topX");
+    topHMIDs = +e.options[e.selectedIndex].value;
+
+    d3.select("#heatmap").select("svg").remove();
+
+    svgHeat = d3.select("#heatmap").append("svg")
+	.attr("width", global_width)
+	.attr("height", heat_height)
+	.append("g")
+
+    d3.select("#heatmapRight").select("svg").remove();
+    
+    svgHeatRight = d3.select("#heatmapRight")
+        .append("svg")
+        .attr("width", right_histo_width)
+        .attr("height", global_width)
+        .append("g")
+    
+    redraw_read_block();
+    redrawHistogram();
+}

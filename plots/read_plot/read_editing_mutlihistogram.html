@@ -7,7 +7,7 @@
         }
 
         body {
-            font: 12px sans-serif;
+            font-family: "HelveticaNeue-Light", "Helvetica Neue Light", "Helvetica Neue", Helvetica, Arial, "Lucida Grande", sans-serif;
         }
 
         .axis path,
@@ -83,6 +83,16 @@
 <div id="selectors" style="position: relative;">
     <input type="checkbox" id="logScale" name="logScale" onchange="changeHistogram()" checked/>Check to log scale the HMID histogram<br>
     <input type="checkbox" id="logScaleTop" name="logScaleTop" onchange="logTheTop()"/>Check to log scale the per-site lines<br>
+
+
+    <select id="topX" onchange="changeSelection()"/>
+      <option value="10">Top 10 events</option>
+      <option value="25">Top 25 events</option>
+      <option value="40">Top 40 events</option>
+      <option value="50">Top 50 events</option>
+      <option value="60">Top 60 events</option>
+      <option value="100">top 100 events</option>
+</select>
 </div>
 
 </body>
