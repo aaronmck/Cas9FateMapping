@@ -41,7 +41,7 @@ var maxReadHeight = 15
 var cropHeightProp = 0.8
 
 // plot up to this many HMID reads on the plot
-var topHMIDs = 10
+var topHMIDs = 100
 
 
 // from http://bl.ocks.org/mbostock/7621155
