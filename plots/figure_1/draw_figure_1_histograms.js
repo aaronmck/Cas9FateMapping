@@ -10,9 +10,11 @@ var reds = ["#190000","#4c0000","#7f0000","#b20000","#e50000","#ff0000","#ff3232
 var blues = ["#000019","#00004c","#00007f","#0000b2","#0000e5","#0000ff","#3232ff","#6666ff","#9999ff","#ccccff"].reverse()
 var colors = d3.scale.ordinal().range(reds.concat(blues))
 
-d3.tsv("event_histogram_t1high.txt", function (error, data) {
+d3.tsv(event_file, function (error, data) {
 
-    // stack the histogram -- easier just to do this ourselves
+    // ---------------------------------------------------------------
+    // create the bar stacking in the histogram -- easiest to just to do this ourselves
+    // ---------------------------------------------------------------
     data.forEach(function(d,i) {
 	
 	d.stackHeight = 0
@@ -62,10 +64,13 @@ d3.tsv("event_histogram_t1high.txt", function (error, data) {
 	.append("rect")
 	.attr({ width:"4", height:"8", transform:"translate(0,0)", fill:"#000000" });
 
+
+    // ---------------------------------------------------------------
+    // create the barplot rectangles
+    // ---------------------------------------------------------------
     var bar = chart.selectAll("g")
 	.data(data)
 	.enter().append("g");
-	//.attr("transform", function(d, i) { return "translate(" + x(+d.bin) + "," + height - Math.max(y(0),y(+d.count)) + ")"; });
     
     bar.append("rect")
    	.attr("height", function(d) {
@@ -100,13 +105,15 @@ d3.tsv("event_histogram_t1high.txt", function (error, data) {
 	.attr("transform", "translate(-10," + 0 + ")")
 	.call(yAxis);
 
-    // we don't use all the colors -- only the 
+    // ---------------------------------------------------------------
+    // add a legend for the the insertion and deletion colors 
+    // ---------------------------------------------------------------
     var legend = chart.selectAll(".legend")
 	.data(colors.range().slice(1,10).concat(colors.range().slice(10,12)))
 	.enter().append("g")
 	.attr("class", "legend")
 	.attr("transform", function(d, i) {
-	    return "translate(" + (width - 160) + "," + ((i * 11) + 50) + ")";
+	    return "translate(" + (width - 160) + "," + ((i * 11) + 65) + ")";
 	});
     
     legend.append("rect")
@@ -114,7 +121,7 @@ d3.tsv("event_histogram_t1high.txt", function (error, data) {
 	.attr("height", 6)
 	.style("fill", colors )
 	.style("stroke", "black" )
-	.attr("stroke-width", 0.8);
+	.attr("stroke-width", 0.5);
     
     legend.append("text")
 	.attr("y", 6)
@@ -122,14 +129,16 @@ d3.tsv("event_histogram_t1high.txt", function (error, data) {
 	//.style("text-anchor", "end")
 	.text(function(d,i) {
 	    if (i == 0) {
-		return (i+1) + " target deleted";
+		return "deletion spanning " + (i+1) + " site";
 	    } else if (i < 10) {
-		return (i+1) + " targets deleted";
+		return "deletion spanning " + (i+1) + " sites";
 	    } else {
-		return (1) + " target inserted";
+		return "insertion spanning 1 site";
 	    }
 	})
-
+    // ---------------------------------------------------------------
+    // add axis labels
+    // ---------------------------------------------------------------
     chart.append("text")
         .attr("text-anchor", "middle")  // this makes it easy to centre the text as the transform is applied to the anchor
         .attr("transform", "translate("+ (width/2) +","+ -30  +")")  // centre below axis
