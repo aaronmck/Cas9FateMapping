@@ -10,4 +10,5 @@ trait InputTable {
   def getUniqueMapping(): HashMap[String, String]
   def getAllEvents(): Array[IndexedNode]
   def getTargetSiteCount() : Int
+  def getSampleCount() : Map[String,Int]
 }

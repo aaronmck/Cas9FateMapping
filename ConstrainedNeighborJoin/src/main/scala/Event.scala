@@ -23,6 +23,7 @@ case class Event(name: String, sample: String, supportCount: Int, eventStrings: 
   def getCount() = support_count
   def getSample() = sample
   def addSupport(additionalCount: Int) { support_count += additionalCount}
+  def countNonWT(): Int = eventStrings.filter{evt => evt.contains("\\+")}.size
 
   def merge(otherNode: IndexedNode, branchLeft: Double, branchRight: Double, newID: Int, constrained: Boolean): IndexedNode = otherNode match {
     case other: Event => Event.merge(this,otherNode.asInstanceOf[Event],branchLeft,branchRight,newID,constrained)

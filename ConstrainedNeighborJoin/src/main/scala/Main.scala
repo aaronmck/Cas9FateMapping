@@ -72,20 +72,26 @@ object Main extends App {
       // parse out the event strings into events
       // ------------------------------------------------------------------------------------------------------------------------
       println("reading in event file...")
-      var statsFile : Option[InputTable] = None
-      statsFile = Some(StatsFile(config.inputReadsTable))
+      var statsFile : InputTable = StatsFile(config.inputReadsTable)
 
       // ------------------------------------------------------------------------------------------------------------------------
       // events to counts -- count the total events over all positions
       // ------------------------------------------------------------------------------------------------------------------------
-      val eventCounter = new NormalizedEventCounter(statsFile.get, 200000.0 /* 200K */)
+      val eventCounter = new NormalizedEventCounter(statsFile, 200000.0 /* 200K */)
+
+      var distMetrics = new HashMap[String,DistanceMetric[IndexedNode]]()
+      distMetrics("SumLog") = SumLogDistance(eventCounter, config.noneDistance, config.equalScore, 2)
+      distMetrics("AvgLog") = AvgLogDistance(eventCounter, config.noneDistance, config.equalScore, 2)
+      distMetrics("Additive") = SimpleAdditiveDistance(eventCounter)
 
       // ------------------------------------------------------------------------------------------------------------------------
       // setup a distance matrix
       // ------------------------------------------------------------------------------------------------------------------------
-      val distMetric = SumLogDistance(eventCounter, config.noneDistance, config.equalScore, 2)
-      //val distMetric = SimpleDistance(eventCounter)
-      val distances = new DistanceMatrix(statsFile.get.getUniqueEvents(), distMetric)
+      //val distMetric = SumLogDistance(eventCounter, config.noneDistance, config.equalScore, 2)
+      val distMetric = SimpleAdditiveDistance(eventCounter)
+      //val distMetric = Hamming(eventCounter)
+      //val distMetric = SumLogDistance(eventCounter, config.noneDistance, config.equalScore, 2)
+      val distances = new DistanceMatrix(statsFile.getUniqueEvents(), distMetric)
       distances.toDistanceFile(config.distanceMatrixFile)
 
       // ------------------------------------------------------------------------------------------------------------------------
@@ -94,7 +100,7 @@ object Main extends App {
       //println("Performing merges (dot per merge)")
       //val minSet = distances.minimizeSet(useConstraints)
 
-      distances.toAnnotationFile(config.annotationFile, statsFile.get)
+      distances.toAnnotationFile(config.annotationFile, statsFile)
       // ------------------------------------------------------------------------------------------------------------------------
       // output the remaining nodes as tree
       // ------------------------------------------------------------------------------------------------------------------------

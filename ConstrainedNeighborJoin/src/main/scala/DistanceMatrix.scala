@@ -392,7 +392,7 @@ class DistanceMatrix(events: Array[IndexedNode], distanceCalculator: DistanceMet
 
     output.write("othernode\t" + 0.until(lastID).map{case(id) => id}.mkString("\t") + "\n")
     0.until(lastID).map{case(id) => {
-      output.write(id + "\t" + 0.until(lastID).map{case(thisid) => distances(id).getOrElse(thisid,0)}.mkString("\t") + "\n")
+      output.write(id + "\t" + 0.until(lastID).map{case(thisid) => distances(id).getOrElse(thisid,0.0)}.mkString("\t") + "\n")
     }}
     output.close()
   }
@@ -404,10 +404,11 @@ class DistanceMatrix(events: Array[IndexedNode], distanceCalculator: DistanceMet
   def toAnnotationFile(outputFile: File, stats: InputTable): Unit = {
     val output = new PrintWriter(outputFile.getAbsolutePath)
 
-    output.write("taxa\tsample\tcount\teventString\n")
+    output.write("taxa\tsample\tcount\teventString\tproportion\n")
     stats.getUniqueEvents().foreach(ft => {
+      val sampleTotal = stats.getSampleCount()(ft.getSample()).toDouble
       output.write(ft.getID() + "\t" + ft.getSample() + "\t" +
-        ft.getCount() + "\t" + ft.getEventStrings().mkString("-") + "\n")
+        ft.getCount() + "\t" + ft.getEventStrings().mkString("-") + "\t" + (ft.getCount().toDouble /sampleTotal) + "\n")
     })
 
     output.close()

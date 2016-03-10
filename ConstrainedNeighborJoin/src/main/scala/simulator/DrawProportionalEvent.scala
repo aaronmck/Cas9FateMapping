@@ -1,4 +1,4 @@
-package simulator
+package main.scala.simulator
 
 import main.scala.{InputTable, EventCounter}
 

@@ -26,6 +26,7 @@ class DistanceMetricTest extends FlatSpec with Matchers {
 }
 
 case class FakeEvent(name: String) extends IndexedNode {
+  def countNonWT(): Int = 0
   var id = -1
   def getID(): Int = id
   def setID(idVal: Int) {id = idVal}

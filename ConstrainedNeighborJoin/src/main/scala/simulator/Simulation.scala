@@ -1,18 +1,10 @@
 package main.scala.simulator
 
-import main.scala.Config
-import main.scala.DistanceMatrix
 import main.scala.InputTable
-import main.scala.Main._
 import main.scala.NormalizedEventCounter
 import main.scala.StatsFile
-import main.scala.SumLogDistance
 
-import scala.io._
 import java.io._
-import scala.collection.mutable._
-import scala.sys.process._
-import java.util.zip._
 
 /**
  *
@@ -57,8 +49,8 @@ object Simulation extends App {
     opt[File]("simulationOutput") required() valueName ("<file>") action { (x, c) => c.copy(simulationOutput = x) } text ("(output) out simulation results")
 
     // some general command-line setup stuff
-    note ("take in a input table, simulate trees from that data, and output summary stastics\n")
-    help ("help") text ("prints the usage information you see here")
+    note("take in a input table, simulate trees from that data, and output summary stastics\n")
+    help("help") text ("prints the usage information you see here")
   }
 
   parser.parse(args, Config()).map {
@@ -70,26 +62,30 @@ object Simulation extends App {
       // ------------------------------------------------------------------------------------------------------------------------
       // parse out the event strings into events
       // ------------------------------------------------------------------------------------------------------------------------
-      println("reading in event file...")
-      var statsFile : Option[InputTable] = None
-      if (config.inputReadsTable.getAbsolutePath endsWith ".stats")
-        statsFile = Some(StatsFile(config.inputReadsTable))
-      else
-        statsFile = Some(CallFile(config.inputReadsTable))
+      //println("reading in event file...")
+      //var statsFile : Option[InputTable] = None
+      //statsFile = Some(StatsFile(config.inputReadsTable))
+      val output = new PrintWriter(config.simulationOutput.getAbsolutePath)
 
       // ------------------------------------------------------------------------------------------------------------------------
       // events to counts -- count the total events over all positions
       // ------------------------------------------------------------------------------------------------------------------------
-      val eventCounter = new NormalizedEventCounter(statsFile.get,200000.0 /* 200K */)
+      //val eventCounter = new NormalizedEventCounter(statsFile.get,200000.0 /* 200K */)
 
-      // ------------------------------------------------------------------------------------------------------------------------
-      // setup a distance matrix
-      // ------------------------------------------------------------------------------------------------------------------------
-      val distances = new DistanceMatrix(statsFile.get.getAllEvents(), SumLogDistance(eventCounter, 1, 2))
-      distances.toDistanceFile(config.distanceMatrixFile)
-
-      // now start simulating events --
-
+      output.write("generation\tmutationRate\teventSize\teditRate\n")
+      (13 until 21).foreach { generation => {
+        (3 until 8).foreach { mutRate =>
+          (1 until 8).foreach { eventSize => {
+            (0 until 25).foreach {index => {
+              val mutationRate = 1 / (math.pow(10, mutRate))
+              output.write(generation + "\t" + mutationRate + "\t" + eventSize + "\t" + index + "\t" + new FakeLineageTree(generation, 10, mutationRate, eventSize * 1.0).editRate + "\n")
+            }}
+          }
+          }
+        }
+      }
+      }
+      output.close()
     }
   }
 

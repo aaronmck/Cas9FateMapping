@@ -3,7 +3,7 @@ package main.scala
 import java.io.PrintWriter
 
 /**
- * Created by aaronmck on 11/19/15.
+ * generic events (nodes) for our distance calculations
  */
 trait IndexedNode {
   def getID(): Int
@@ -16,4 +16,5 @@ trait IndexedNode {
   def getCount(): Int
   def getSample(): String
   def addSupport(additionalSupportCount: Int)
+  def countNonWT(): Int
 }
