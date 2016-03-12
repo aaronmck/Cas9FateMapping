@@ -72,6 +72,9 @@ class DNAQC extends QScript {
   @Argument(doc = "the mapping from sample name to biologically meaningful clade", fullName = "cladeAssignments", shortName = "cladeAssignments", required = false)
   var cladeAssignments: File = ""
 
+  @Argument(doc = "do we NOT want to use Trimmomatic to clean the reads of bad sequence?", fullName = "dontTrim", shortName = "dontTrim", required = false)
+  var dontTrim: Boolean = false
+
 
   /** **************************************************************************
     * Optional Parameters -- control parameters for the script (alignment, etc)
@@ -82,6 +85,9 @@ class DNAQC extends QScript {
 
   @Argument(doc = "are we runing with UMI reads? If so set this value to > 0, representing the UMI length", fullName = "umi", shortName = "umi", required = false)
   var umiData: Int = 0
+
+  @Argument(doc = "the number of UMIs required to call a successful UMI capture event", fullName = "umiCount", shortName = "umiCount", required = false)
+  var minUMIs = 10
 
   /** **************************************************************************
     * Path parameters -- where to find tools
@@ -154,7 +160,7 @@ class DNAQC extends QScript {
   var pandaseqPath: File = "/net/gs/vol3/software/modules-sw/PANDAseq/2.8.1/Linux/RHEL6/x86_64/bin/pandaseq"
 
   @Input(doc = "the path the javascript conversion script", fullName = "JSTable", shortName = "JSTable", required = false)
-  var toJSTableScript: File = "/net/shendure/vol10/projects/CRISPR.lineage/nobackup/codebase/scripts/stats_to_javascript_tables.scala"
+  var toJSTableScript: File = "/net/shendure/vol10/projects/CRISPR.lineage/nobackup/codebase/scripts/stats_to_javascript_tables2.scala"
 
   @Argument(doc = "zip two reads together", fullName = "ZipReads", shortName = "ZipReads", required = false)
   var zipReadsPath = "/net/shendure/vol10/projects/CRISPR.lineage/nobackup/codebase/scripts/zip_two_read_files.scala"
@@ -190,10 +196,13 @@ class DNAQC extends QScript {
   var createTreeScript = "/net/shendure/vol10/projects/CRISPR.lineage/nobackup/codebase/scripts/create_tree.R"
 
   @Argument(doc = "The four gamete test", fullName = "fourGamete", shortName = "fourGamete", required = false)
-  var fourGameteScript = "/net/shendure/vol10/projects/CRISPR.lineage/nobackup/codebase/scripts/four_gamete_test.scala"
+  var fourGameteScript = "/net/shendure/vol10/projects/CRISPR.lineage/nobackup/codebase/scripts/four_gamete_test2.scala"
 
   @Argument(doc = "create a file for use in PHYLIP's mix", fullName = "toMix", shortName = "toMix", required = false)
   var toMixScript = "/net/shendure/vol10/projects/CRISPR.lineage/nobackup/codebase/scripts/stats_to_mix_input.scala"
+
+  @Argument(doc = "post stats umi plot script -- so we know if our cutoffs were ok", fullName = "umiPlots", shortName = "umiPlots", required = false)
+  var toUMIPlotScript = "/net/shendure/vol10/projects/CRISPR.lineage/nobackup/codebase/scripts/post_stats_umi_plot.R"
 
   /** **************************************************************************
     * Global Variables
@@ -273,9 +282,9 @@ class DNAQC extends QScript {
         inputFiles = List[File](barcodeSplit1,barcodeSplit2)
       }
 
-      val postProcessedFastq1 = new File(sampleOutput + File.separator + sampleTag + ".cleaned.trim.fastq1.fq.gz")
-      val postProcessedFastq2 = new File(sampleOutput + File.separator + sampleTag + ".cleaned.trim.fastq2.fq.gz")
-      val cleanedFastqs = List[File](postProcessedFastq1,postProcessedFastq2)
+      val cleanedFastqs = List[File](
+        new File(sampleOutput + File.separator + sampleTag + ".cleaned.trim.fastq1.fq.gz"),
+        new File(sampleOutput + File.separator + sampleTag + ".cleaned.trim.fastq2.fq.gz"))
 
       // run an Fastqc so we know what we started with
       // ************************************************************************************
@@ -289,59 +298,63 @@ class DNAQC extends QScript {
 
       val perBaseEventFile = new File(sampleOutput + File.separator + sampleTag + ".perBase")
       val topReadFile = new File(sampleOutput + File.separator + sampleTag + ".topReadEvents")
+      val topReadFileNew = new File(sampleOutput + File.separator + sampleTag + ".topReadEventsNew")
       val topReadCount = new File(sampleOutput + File.separator + sampleTag + ".topReadCounts")
       val allReadCount = new File(sampleOutput + File.separator + sampleTag + ".allReadCounts")
       val cutSites = new File(sampleObj.reference + ".cutSites")
 
       // clean up the reads as much as possible
       val unpairedReads = List[File](new File(sampleOutput + File.separator + sampleTag + ".unpaired1.fq.gz"),new File(sampleOutput + File.separator + sampleTag + ".unpaired2.fq.gz"))
-      val cleanedTmp = List[File](new File(sampleOutput + File.separator + sampleTag + ".cleanedInter1.fq.gz"),new File(sampleOutput + File.separator + sampleTag + ".cleanedInter2.fq.gz"))
-      add(Trimmomatic(inputFiles,adaptersFile,cleanedTmp,unpairedReads))
+
+      // *******************************************************************************************
+      // from here on we propagate the cleanedTmp as the input to the next step
+      // *******************************************************************************************
+      var cleanedTmp = List[File](new File(sampleOutput + File.separator + sampleTag + ".cleanedInter1.fq.gz"),new File(sampleOutput + File.separator + sampleTag + ".cleanedInter2.fq.gz"))
+
+
+      if (!dontTrim) { // yes a double negitive...sorry: if we want to trim, do this
+        add(Trimmomatic(inputFiles,adaptersFile,cleanedTmp,unpairedReads))
+      } else {
+        // just pass through the input files as 'cleaned'
+        cleanedTmp = inputFiles
+      }
 
       if (sampleObj.UMIed) {
-
-        add(SeqPrepNoMerge(cleanedTmp, cleanedFastqs))
+        val toAlignFastq1 = new File(sampleOutput + File.separator + sampleTag + ".umi.fwd.fastq")
+        val toAlignFastq2 = new File(sampleOutput + File.separator + sampleTag + ".umi.rev.fastq")
 
         // collapse the reads by their UMI and output FASTA files with the remaining quality reads
-        add(UMIProcessingPaired(postProcessedFastq1,
-          postProcessedFastq2,
+        add(UMIProcessingPaired(
+          cleanedTmp(0),
+          cleanedTmp(1),
           toAlignFastq1,
           toAlignFastq2,
-          toAlignStats,
-          toAlignUMIStats,
           10,
-          new File(sampleObj.reference + ".primers"),
-          new File(sampleObj.reference),
-          sampleObj.sample,
-          new File(sampleObj.reference + ".cutSites"),
-          sampleObj.UMIed))
-
-        umiStatsFiles :+= toAlignStats 
-
-        //add(StatsAnalysis(toAlignStats, plotsDir, sampleTag))
-
-      } else {
-        add(SeqPrep(cleanedTmp, cleanedFastqs, mergedReads))
-
-        add(ZipReadFiles(postProcessedFastq1, postProcessedFastq2, unmergedUnzipped))
-        add(Gunzip(mergedReads, mergedReadUnzipped))
-
-        add(NeedlemanAllFasta(sampleObj.reference, unmergedUnzipped, samUnmergedFasta, false))
-        add(NeedlemanAllFasta(sampleObj.reference, mergedReadUnzipped, samMergedFasta, false))
-
-        add(ReadsToStats(samUnmergedFasta,
-          samMergedFasta,
-          toAlignStats,
-          cutSites,
           new File(sampleObj.reference + ".primers"),
           sampleObj.sample))
 
-        nonUmiStatsFiles :+= toAlignStats 
-
+        cleanedTmp = List[File](toAlignFastq1,toAlignFastq2)
       }
 
-      add(ToJavascriptTables(toAlignStats, cutSites, perBaseEventFile, topReadFile, topReadCount,allReadCount))
-      add(ToWebPublish(sampleWebLocation, perBaseEventFile, topReadFile, topReadCount, cutSites, allReadCount))
+      add(SeqPrep(cleanedTmp, cleanedFastqs, mergedReads))
+
+      add(ZipReadFiles(cleanedFastqs(0), cleanedFastqs(1), unmergedUnzipped))
+      add(Gunzip(mergedReads, mergedReadUnzipped))
+
+      add(NeedlemanAllFasta(sampleObj.reference, unmergedUnzipped, samUnmergedFasta, false))
+      add(NeedlemanAllFasta(sampleObj.reference, mergedReadUnzipped, samMergedFasta, false))
+
+      add(ReadsToStats(samUnmergedFasta,
+        samMergedFasta,
+        toAlignStats,
+        cutSites,
+        new File(sampleObj.reference + ".primers"),
+        sampleObj.sample))
+
+      nonUmiStatsFiles :+= toAlignStats
+
+      add(ToJavascriptTables(toAlignStats, cutSites, perBaseEventFile, topReadFile, topReadCount,allReadCount, topReadFileNew))
+      add(ToWebPublish(sampleWebLocation, perBaseEventFile, topReadFileNew, topReadCount, cutSites, allReadCount))
       add(FourGametes(toAlignStats,
         new File(sampleOutput + File.separator + sampleTag + ".fourGametes"),
         new File(sampleOutput + File.separator + sampleTag + ".alleleCounts")))
@@ -369,11 +382,11 @@ class DNAQC extends QScript {
       val annotationFile = new File(aggregateLocation + File.separator + "merged.annotations")
       val completeAnnotationFile = new File(aggregateLocation + File.separator + "merged.complete.annotations")
       val distanceFile = new File(aggregateLocation + File.separator + "merged.distance")
-      add(DistanceCalculation(mergedStatsFile, treeFile, annotationFile, distanceFile))
+      // add(DistanceCalculation(mergedStatsFile, treeFile, annotationFile, distanceFile))
 
       // create the tree files -- 
-      add(CreateTree(distanceFile,treeFile,annotationFile,completeAnnotationFile))
-      add(CreateHTMLTree(treeFile,aggWebTreeLocation))
+      // add(CreateTree(distanceFile,treeFile,annotationFile,completeAnnotationFile))
+      // add(CreateHTMLTree(treeFile,aggWebTreeLocation))
 
     }
     // non-UMI finishing
@@ -500,15 +513,16 @@ class DNAQC extends QScript {
     * ************************************************************************** */
 
   // ********************************************************************************************************
-  case class ToJavascriptTables(statsFile: File, cutSites: File, perBaseEvents: File, topReads: File, topReadCounts: File, allEventCounts: File) extends ExternalCommonArgs {
+  case class ToJavascriptTables(statsFile: File, cutSites: File, perBaseEvents: File, topReads: File, topReadCounts: File, allEventCounts: File, perBaseEventsNew: File) extends ExternalCommonArgs {
     @Input(doc = "the input stats file") var stats = statsFile
     @Input(doc = "the  cut sites information file") var cuts = cutSites
     @Output(doc = "per base event counts") var perBase = perBaseEvents
     @Output(doc = "the top reads and their base by base events") var topR = topReads
     @Output(doc = "the the counts for all the top reads") var topReadC = topReadCounts
     @Output(doc = "the the counts for all the reads") var allReadC = allEventCounts
+    @Output(doc = "new per base event style") var perBaseES = perBaseEventsNew
 
-    def commandLine = "scala -J-Xmx6g " + toJSTableScript + " " + stats + " " + perBase + " " + topR + " " + topReadC + " " + allReadC + " " + cuts
+    def commandLine = "scala -J-Xmx6g " + toJSTableScript + " " + stats + " " + perBase + " " + topR + " " + topReadC + " " + allReadC + " " + cuts + " " + perBaseES
 
     this.analysisName = queueLogDir + stats + ".toJS"
     this.jobName = queueLogDir + stats + ".toJS"
@@ -680,7 +694,7 @@ class DNAQC extends QScript {
     @Output(doc = "the output fasta file") var outFasta = outputFasta
 
     //-sreverse2
-    def commandLine = needlePath + " -datafile /net/shendure/vol10/projects/CRISPR.lineage/nobackup/reference_data/EDNAFULL -snucleotide1 -snucleotide2 " + (if (reverse) "-sreverse2 " else " ") + "-aformat3 fasta -gapextend 0.5 -gapopen 15.0 -asequence " + ref + " -bsequence " + fq + " -outfile " + outFasta
+    def commandLine = needlePath + " -datafile /net/shendure/vol10/projects/CRISPR.lineage/nobackup/reference_data/EDNAFULL -snucleotide1 -snucleotide2 " + (if (reverse) "-sreverse2 " else " ") + "-aformat3 fasta -gapextend 0.5 -gapopen 10.0 -asequence " + ref + " -bsequence " + fq + " -outfile " + outFasta
 
     this.analysisName = queueLogDir + outFasta + ".needle"
     this.jobName = queueLogDir + outFasta + ".needle"
@@ -892,6 +906,19 @@ class DNAQC extends QScript {
     this.isIntermediate = false
   }
 
+    // ********************************************************************************************************
+  case class ToUMIPlot(statsUMIFile: File, plotFile: File)
+    extends CommandLineFunction with ExternalCommonArgs {
+    @Input(doc = "the stats UMI count file") var statsUMI = statsUMIFile
+    @Output(doc = "the output plot of UMI counts file") var umiPlot = plotFile
+
+    def commandLine = "Rscript " + toUMIPlotScript + " " + statsUMI + " " + umiPlot + " " + minUMIs
+
+    this.analysisName = queueLogDir + plotFile + ".umiCount"
+    this.jobName = queueLogDir + plotFile + ".umiCount"
+    this.isIntermediate = false
+  }
+
 
   // copy the HTML tree file over the tree location
   // ********************************************************************************************************
@@ -920,7 +947,7 @@ class DNAQC extends QScript {
   }
 
 
-  // gzip a bunch of fastqs into a single gzipped fastq
+  // 
   // ********************************************************************************************************
   case class SetupWebAnalysis(reference: File,
     refCuts: File,
@@ -979,7 +1006,7 @@ class DNAQC extends QScript {
     var appended = "ILLUMINACLIP:" + adapters.getAbsolutePath() + ":2:30:12" // where to find the illumina adapter file
     appended += " LEADING:10" // trim off leading bases with a quality less than 10
     appended += " TRAILING:10" // trim off trailing bases with a quality less than 10
-    appended += " SLIDINGWINDOW:5:15" // remove bases with a quality less than 20 in a sliding window of size 3
+    appended += " SLIDINGWINDOW:5:15" // remove bases with a quality less than X in a sliding window of size 
     appended += " MINLEN:75" // the resulting reads must have a length of at least X
 
     // setup the memory limits, high for trimmomatic (java + SGE = weird memory issues...)
@@ -1036,26 +1063,20 @@ class DNAQC extends QScript {
    * val reference = args(5)
    */
   // ********************************************************************************************************
-  case class UMIProcessingPaired(inMergedReads1: File, inMergedReads2: File, outputFASTA1: File,
-    outputFASTA2: File, outputStats: File, outputUMIStats: File,umiCutOff: Int, primersFile: File, reference: File, sampleName: String, cutSites: File, usingUMI: Boolean) extends CommandLineFunction with ExternalCommonArgs {
+  case class UMIProcessingPaired(inMergedReads1: File, inMergedReads2: File, outputFASTA1: File, outputFASTA2: File,
+    umiCutOff: Int, primersFile: File, sampleName: String) extends CommandLineFunction with ExternalCommonArgs {
 
     @Input(doc = "input reads (fwd)") var inReads1 = inMergedReads1
     @Input(doc = "input reads (rev)") var inReads2 = inMergedReads2
-    @Input(doc = "the cutsite locations") var cutSiteFile = cutSites
     @Output(doc = "output fasta for further alignment (fwd)") var outFASTA1 = outputFASTA1
     @Output(doc = "output fasta for further alignment (rev)") var outFASTA2 = outputFASTA2
-    @Output(doc = "output statistics file for containing information about the UMI merging process") var outStat = outputStats
-    @Output(doc = "output statistics file of UMI merging process") var outUMIStat = outputUMIStats
     @Argument(doc = "how many UMIs do we need to initial have to consider merging them") var umiCut = umiCutOff
     @Argument(doc = "the primers file; one line per primer that we expect to have on each end of the resulting merged read") var primers = primersFile
-    @Argument(doc = "the reference file") var ref = reference
     @Argument(doc = "the sample name") var sample = sampleName
-    @Argument(doc = "using UMI") var umied = usingUMI
 
     var cmdString = "scala -J-Xmx13g /net/shendure/vol10/projects/CRISPR.lineage/nobackup/bin/UMIMerge.jar "
-    cmdString += " --inputFileReads1 " + inReads1 + " --inputFileReads2 " + inReads2 + " --outputFastq1 " + outFASTA1 + " --outputFastq2 " + outFASTA2 + " --outputStats "
-    cmdString += outStat + " --umiLength " + umiCut + " --primersEachEnd " + primers + " --reference " + ref + " --samplename "
-    cmdString += sample + " --umiStart 0 --cutSites " + cutSiteFile + " --outputUMIStats " + outUMIStat
+    cmdString += " --inputFileReads1 " + inReads1 + " --inputFileReads2 " + inReads2 + " --outputFastq1 " + outFASTA1 + " --outputFastq2 " + outFASTA2 
+    cmdString += " --umiLength " + umiCut + " --primersEachEnd " + primers + " --samplename " + sample + " --umiStart 0 --minimumUMIReads " + 10
 
     var cmd = cmdString
 
@@ -1065,8 +1086,8 @@ class DNAQC extends QScript {
 
     def commandLine = cmd
     this.isIntermediate = false
-    this.analysisName = queueLogDir + outStat + ".umis"
-    this.jobName = queueLogDir + outStat + ".umis"
+    this.analysisName = queueLogDir + inReads1 + ".umis"
+    this.jobName = queueLogDir + inReads1 + ".umis"
   }
 
   //--inputUnmerged --inputMerged --outputStats --cutSites --primersEachEnd --sample test
