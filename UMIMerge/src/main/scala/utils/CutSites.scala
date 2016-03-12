@@ -48,7 +48,7 @@ object CutSites {
 
       cut.cutSites(index) = cutSite
       cut.startSites(index) = start
-      cut.fullSites :+=(name, start, cutSite + cutsiteToPamDistance)
+      cut.fullSites :+=(name, start, start + name.length)
       cut.windows :+=(cutSite - windowSize, cutSite, cutSite + windowSize)
     }
     }

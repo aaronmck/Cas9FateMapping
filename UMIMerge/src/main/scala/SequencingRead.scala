@@ -316,12 +316,24 @@ object SequencingRead {
   }
 
   /**
+   * this is for testing
    * @param name read name
    * @param bases bases as a string
-   * @return
+   * @return a seq read with quality H
    */
   def readFromNameAndSeq(name: String, bases: String): SequencingRead = {
     SequencingRead(name,bases,"H"*bases.length,ForwardReadOrientation,"UNKNOWN")
+  }
+
+  /**
+   * this is for testing
+   * @param name read name
+   * @param bases bases as a string
+   * @param qualBase as a string
+   * @return a seq read with quality H
+   */
+  def readFromNameAndSeq(name: String, bases: String, qualBase: String): SequencingRead = {
+    SequencingRead(name,bases,qualBase*bases.length,ForwardReadOrientation,"UNKNOWN")
   }
 }
 

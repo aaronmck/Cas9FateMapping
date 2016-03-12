@@ -1,10 +1,19 @@
 /**
  * the library for phylogenetic drawings
  */
+
 if (!d3) {
     throw "d3 wasn't included!"
 }
 ;
+
+
+// ************************************************************************************************************************
+//
+// The main entry point for the script -- load and draw the tree, and add out events on the right side of the diagram
+//
+// ************************************************************************************************************************
+
 (function () {
     d3.phylogram = {}
     d3.phylogram.rightAngleDiagonal = function () {
@@ -113,25 +122,32 @@ if (!d3) {
         return yscale
     }
 
-    function scaleYPositions(nodes, height, nodeTransform) {
-
-        var counts = new Array()
-        var rootDists = nodes.map(function (n) {
-            counts.push(nodeTransform(n.name))
-        });
-
-    }
-
-
-    d3.phylogram.build = function (selector, nodes, options, nodeTransform, colorLookup, nodeToEvent) {
+    d3.phylogram.build = function (selector, nodes, options, taxaToObj, maxCount) {
         options = options || {}
-        var w = options.width || d3.select(selector).style('width') || d3.select(selector).attr('width'),
-            h = options.height || d3.select(selector).style('height') || d3.select(selector).attr('height'),
+        var w = options.width - 250,
+            h = options.height - 200,
             w = parseInt(w),
             h = parseInt(h);
 
 
-        var distanceScale = 60.0
+	// spacing and locations for various graphic members
+	var offset = 500
+	var event_location = 1500 - offset
+	var membership_location = event_location + 375
+	var primary_bar = membership_location + 75
+	var barplot_location = primary_bar + 75
+	var barWidth = 50
+	var barHeight = 10
+
+	var bar_stroke_width = '1.0px'
+	
+	// the offsets in the aligned reads to consider for event plotting
+	var startRegion = 110
+	var endRegion = 416
+
+	// 
+	var scaleX = d3.scale.linear().domain([0,1.0]).range([0,150])
+	var xAxis = d3.svg.axis().scale(scaleX).orient("bottom").ticks(5)
 
         // taxa    name    sample  depth   numberOfReads   events  fullName
         var tree = options.tree || d3.layout.cluster()
@@ -141,23 +157,13 @@ if (!d3) {
                 })
                 .children(options.children || function (node) {
                         return node.branchset
-                    })
-                .separation(function (a, b) {
-                    if (a.name != "" && b.name != "") {
-                        return (distanceScale * (nodeTransform(a.name) + nodeTransform(b.name)))
-                    } else if (a.name == "") {
-                        return (distanceScale * nodeTransform(b.name))
-                    } else if (b.name == "") {
-                        return (distanceScale * nodeTransform(a.name))
-                    } else {
-                        return (distanceScale)
-                    }
-                });
+                })
+	    .separation(function (a, b) {return 2})
 
         var diagonal = options.diagonal || d3.phylogram.rightAngleDiagonal();
-        var vis = options.vis || d3.select(selector).append("svg:svg")
-                .attr("width", w + 300)
-                .attr("height", h + 30)
+        var vis = d3.select(selector).append("svg:svg")
+                .attr("width", w + 800)
+                .attr("height", h + 200)
                 .append("svg:g")
                 .attr("transform", "translate(20, 20)");
         var nodes = tree(nodes);
@@ -168,34 +174,7 @@ if (!d3) {
                 .range([0, w]);
         } else {
             var yscale = scaleBranchLengths(nodes, w)
-            var newNodes = scaleYPositions(nodes, h, nodeTransform)
         }
-
-        if (!options.skipTicks) {
-            vis.selectAll('line')
-                .data(yscale.ticks(10))
-                .enter().append('svg:line')
-                .attr('y1', 0)
-                .attr('y2', h)
-                .attr('x1', yscale)
-                .attr('x2', yscale)
-                .attr("stroke", "#ddd");
-
-            vis.selectAll("text.rule")
-                .data(yscale.ticks(10))
-                .enter().append("svg:text")
-                .attr("class", "rule")
-                .attr("x", yscale)
-                .attr("y", 0)
-                .attr("dy", -3)
-                .attr("text-anchor", "middle")
-                .attr('font-size', '8px')
-                .attr('fill', '#ccc')
-                .text(function (d) {
-                    return Math.round(d * 100) / 100;
-                });
-        }
-
 
 	
         var link = vis.selectAll("path.link")
@@ -207,35 +186,41 @@ if (!d3) {
             .attr("stroke", "#111")
             .attr("stroke-width", "2px");
 
-        var triangle = d3.svg.symbol()
-            .type('triangle-up')
-            .size(function (d) {
-                return d.children ? 0 : nodeTransform(d.name) * nodeTransform(d.name)
-            })
-
 	var square = d3.svg.symbol()
             .type('square')
             .size(function (d) {
-                return d.children ? 0 : nodeTransform(d.name) * nodeTransform(d.name)
+		return 1;
             })
-
+	
 	var squaresOnEnds = vis.selectAll("g.node")
             .data(nodes)
             .enter().append("rect")
             .filter(function(d) {return ! d.children })
-            .attr('fill', '#EEE')
-            .attr('stroke', '#111')
-            .attr('stroke-width', '0.0px')
-	    .attr("height", 300)
-	    .attr("width", function(d) {return nodeTransform(d.name)})
-            .attr("transform", function (d) {
-                return "translate(" + (d.y) + "," + (d.x + nodeTransform(d.name) * 0.25) + ") rotate(-90) ";
-            })/*
-            .style("fill", function (d) {
-                return d.children ? "black" : colorLookup(d.name)
-		})*/
+	    .each(function(d) {
+		if (d.name != "") {
+		    var event = taxaToObj(d.name).event
+		    var eventArray = padWithMatches(hmidToEvents(taxaToObj(d.name).event),startRegion,endRegion)
+		    drawDottedConnector(d)
+		    drawNodes(eventArray,d,250,endRegion-startRegion,barHeight,barWidth)
+		    drawMembership(d,barHeight,barWidth)
+		    drawIsPrimary(d,barHeight,barWidth)
+		    //drawCounts(d,scaleX)
+		}
+	    });
 
-	function drawNodes(eventArray, d, barLength,size) {
+	function drawDottedConnector(d) {
+	    var myLine = vis.append("svg:line")
+                .attr("class", 'd3-dp-line')
+                .attr("y1", d.x)
+                .attr("x1", d.y)
+                .attr("y2", d.x)
+                .attr("x2", barplot_location)
+                .style("stroke-dasharray", ("3, 3"))
+                .style("stroke-opacity", 1.5)
+                .style("stroke", "gray")
+	}
+	
+	function drawNodes(eventArray, d, barLength,size, barHeight) {
 	    // scale from the event window to the barlength on the screen
 	    var scaleX = d3.scale.linear().range([0,barLength]).domain([0,size])
 	    var heatmap_colors = ['#FFFFFF','#CE343F','#2E4D8E','#D49E35'];
@@ -244,24 +229,43 @@ if (!d3) {
 		var rectangle = vis.append("rect")
 		    .attr('fill', heatmap_colors[eventArray[i].typ] )
 		    .attr('stroke', '#111')
-		    .attr('stroke-width', '1px')
-		    .attr("width", 3)
+		    .attr('stroke-width', bar_stroke_width)
+		    .attr("width", barHeight)
 		    .attr("height", function(d) {return scaleX(eventArray[i].len)})
-		    .attr("transform","translate(" + (1200 + scaleX(eventArray[i].pos)) + "," + (d.x + nodeTransform(d.name) * 0.25) + ") rotate(-90) ");
+		    .attr("transform","translate(" + (event_location + scaleX(eventArray[i].pos)) + "," + (d.x + barHeight/2.0) + ") rotate(-90) ");
 	    }
 	}
-
-	var startRegion = 110
-	var endRegion = 416
-	d3.selectAll('rect')  //here's how you get all the nodes
-	    .each(function(d) {
-		if (d.name != "") {
-		    var event = nodeToEvent(+d.name)
-		    var eventArray = padWithMatches(hmidToEvents(event),startRegion,endRegion)
-		    drawNodes(eventArray,d,250,endRegion-startRegion)
-		}
-	    });
 	
+	function drawMembership(d,barHeight,barWidth) {
+	    var rectangle = vis.append("rect")
+		.attr('fill', taxaToObj(d.name).clade)
+		.attr('stroke', '#111')
+		.attr('stroke-width', bar_stroke_width)
+		.attr("width", barHeight)
+		.attr("height", barWidth)
+		.attr("transform","translate(" + membership_location + "," + (d.x + barHeight/2.0) + ") rotate(-90) ");
+	}
+
+	function drawCounts(d, scaleX, barHeight) {
+	    var rectangle = vis.append("rect")
+		.attr('fill', taxaToObj(d.name).clade)
+		.attr('stroke', '#111')
+		.attr('stroke-width', bar_stroke_width)
+		.attr("width", barHeight)
+		.attr("height",scaleX(taxaToObj(d.name).proportion))
+		.attr("transform","translate(" + barplot_location + "," + (d.x + barHeight/2.0) + ") rotate(-90) ");
+	}
+
+	function drawIsPrimary(d,barHeight,barWidth) {    
+	    var rectangle = vis.append("rect")
+		.attr('fill', taxaToObj(d.name).color)
+		.attr('stroke', '#111')
+		.attr('stroke-width', bar_stroke_width)
+		.attr("width", barHeight)
+		.attr("height", barWidth)
+		.attr("transform","translate(" + primary_bar + "," + (d.x + barHeight/2.0) + ") rotate(-90) ");
+	}
+
         d3.phylogram.styleTreeNodes(vis)
 
         if (!options.skipLabels) {
@@ -275,12 +279,12 @@ if (!d3) {
                 .text(function (d) {
                     return d.length;
                 });
-
+	    
             vis.selectAll('g.leaf.node').append("svg:text")
                 .attr("dx", 8)
                 .attr("dy", 3)
                 .attr("text-anchor", "start")
-                .attr('font-family', 'Helvetica Neue, Helvetica, sans-serif')
+                .attr('font-family', 'sans-serif')
                 .attr('font-size', '10px')
                 .attr('fill', 'black')
                 .text(function (d) {
@@ -288,6 +292,43 @@ if (!d3) {
                 });
         }
 
+
+	var mutbox2 = vis.selectAll(".bar")
+            .data(nodes)
+            .enter().append("rect")
+	    .attr("class", "bar")
+	    .filter(function(d) {return ! d.children })
+            .style("fill", function(d) {
+		return taxaToObj(d.name).clade;
+	    })
+            .style("stroke", "black")
+            .attr("class", "bar")
+            .attr("height", function(d) {
+		return scaleX(taxaToObj(d.name).proportion);
+	    })
+            .attr("width", function(d) {
+		return 10;
+	    })
+	    .attr("transform", function (d) {
+                return "translate(" + (barplot_location) + "," + (d.x + 5) + ") rotate(-90) ";
+            })
+
+	
+	vis.append("g")
+            .attr("class", "x axis")
+            .attr("transform", "translate(" + (barplot_location) + "," + (d3.max(nodes,function(d) {return d.x}) + 15) + ")")
+	    .call(xAxis)
+            .selectAll("text")
+            .attr("dy", ".15em")
+	    .attr('font-family', 'sans-serif')
+            .attr('font-size', '25px')
+	    .attr("transform", function(d) {
+                return "rotate(-90)" 
+            })
+	    .attr("x",-25)
+	    .attr("y",5)
+	
+	
         return {tree: tree, vis: vis}
     }
 }());
@@ -360,4 +401,98 @@ function eventToObject(event) {
     return {typ: typeOf, len: lengthOf, pos: position}
 }
 
-//console.log(padWithMatches(hmidToEvents("45I+124+AAAAAAAA_2D+179"),100,300))
+
+
+// ************************************************************************************************************************
+//
+// The main entry point for the script -- load and draw the tree, and add out events on the right side of the diagram
+//
+// ************************************************************************************************************************
+
+var annotations = "cell_culture_annotations_with_proportions.txt" // "cell_culture_annotations.txt"
+
+var newickStringRep = $.ajax({
+    url: "balanced_newick.tree2",
+    async: false
+}).responseText;
+
+function load() {
+
+    // ------------------------------------------------------------------------------------------------------
+    // load up the newick tree file, and build a set of nodes from that file
+    // ------------------------------------------------------------------------------------------------------
+
+    var newick = Newick.parse(newickStringRep) // defined in the input file
+    var newickNodes = []
+    function buildNewickNodes(node, callback) {
+        newickNodes.push(node)
+        if (node.branchset) {
+	    for (var i=0; i < node.branchset.length; i++) {
+		buildNewickNodes(node.branchset[i])
+	    }
+        }
+    }
+    buildNewickNodes(newick)
+
+
+    // ------------------------------------------------------------------------------------------------------
+    // load up the annotations file here and update the tree with nicer features
+    // ------------------------------------------------------------------------------------------------------
+    d3.tsv(annotations, function(error2, data2) { // embryo_annotations_with_reads.txt
+        var color = ["#1F77B4","#00A651","#F57E20","#D62029","#1F77B4","#92278F","#F9ED32"];
+	// d3.scale.category10()
+
+	var counts = new Array();
+	// ------------------------------------------------------------------------------------------------------
+	// create a mapping of the name to an annotation object
+	 var nameToAnnotation = data2.reduce(function(map, obj) {
+	     var objNameNum = +obj.sample;
+	     if (objNameNum > 12) {
+		 objNameNum = Math.ceil((objNameNum - 12) / 2.0)
+	     }
+	     if (objNameNum > 2) {
+		 objNameNum = objNameNum - 2
+	     } else {
+		 objNameNum = objNameNum - 1
+	     }
+	     
+	     var clr = "black";
+	     if (+obj.sample > 12) {
+		 clr = "darkgray"
+	     }
+
+	     if (obj.taxa != "NONE") {counts.push(+obj.count);} // +obj.numberOfReads);}
+	     
+	     var returnObj = {sample: +obj.sample,
+			      color: clr,
+			      clade: color[objNameNum],
+			      event: obj.eventString,
+			      proportion: +obj.proportion,
+			     }
+
+	     map[obj.taxa] = returnObj;
+	     return map;
+	}, {});
+	
+
+	// ------------------------------------------------------------------------------------------------------
+	// develop a scale for read counts
+        var countsScale = d3.scale.linear()
+            .domain([0, d3.max(counts)])
+            .range([5,20]);
+	
+	var taxaToEvt = function(d) {
+            return nameToAnnotation[d];
+        };
+	
+	var maxCount = d3.max(data2, function(d) {return +d.proportion});
+
+	// ------------------------------------------------------------------------------------------------------
+	// the main function call to build the phylogeny
+	d3.phylogram.build('#phylogram', newick, {width: 1500,height: 2000},
+			   taxaToEvt,
+			   maxCount
+			  );
+    });
+    
+}

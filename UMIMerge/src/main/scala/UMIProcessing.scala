@@ -4,7 +4,7 @@ import java.util
 
 import _root_.utils.{CutSites}
 import main.scala.stats.StatsOutput
-import utils.Utils
+import main.scala.utils.{RankedReadContainer, Utils}
 
 import scala.collection.mutable
 import scala.io._
@@ -128,15 +128,13 @@ object UMIProcessing extends App {
       throw new IllegalStateException("You should only provide a primer file with two primers")
 
     // our containers for forward and reverse reads
-    var umiReadsFWD = new mutable.HashMap[String, ArrayBuffer[SequencingRead]]()
-    var umiReadsRVS = new mutable.HashMap[String, ArrayBuffer[SequencingRead]]()
+    var umiReads = new mutable.HashMap[String, RankedReadContainer]()
 
-    // our containers for forward and reverse reads
-    val umiReadsFWDCount = new mutable.HashMap[String, Int]()
-    val umiReadsFWDNoPrim = new mutable.HashMap[String, Int]()
-    val umiReadsRVSCount = new mutable.HashMap[String, Int]()
-    val umiReadsRVSNoPrim = new mutable.HashMap[String, Int]()
-    val umisTotal = new mutable.HashMap[String, Boolean]()
+    val downsampleSize = 40
+    val minReads = config.minimumUMIReads
+    var tooFewReadsUMI = 0
+    var downsampledUMI = 0
+    var justRightUMI = 0
 
     // --------------------------------------------------------------------------------
     // process the reads into bins of UMIs, keep fwd/rev reads together
@@ -150,27 +148,16 @@ object UMIProcessing extends App {
       val readNoUMI = fGroup(1).slice(config.umiLength, fGroup(1).length)
       val qualNoUMI = fGroup(3).slice(config.umiLength, fGroup(3).length)
 
-      umisTotal(umi) = true
-
       val containsForward = readNoUMI contains (primers(0))
       val containsReverse = rGroup(1) contains (Utils.reverseComplement(primers(1)))
 
-      if (containsForward && containsReverse) {
-        val readBuilderF = umiReadsFWD.getOrElse(umi, new ArrayBuffer[SequencingRead]())
-        val readBuilderR = umiReadsRVS.getOrElse(umi, new ArrayBuffer[SequencingRead]())
+      if (!(umiReads contains umi))
+        umiReads(umi) = new RankedReadContainer(umi,downsampleSize)
 
-        readBuilderF += SequencingRead(fGroup(0), readNoUMI, qualNoUMI, ForwardReadOrientation, umi)
-        umiReadsFWD(umi) = readBuilderF
+      val fwd = SequencingRead(fGroup(0), readNoUMI, qualNoUMI, ForwardReadOrientation, umi)
+      val rev = SequencingRead(rGroup(0), rGroup(1), rGroup(3), ReverseReadOrientation, umi)
 
-        readBuilderR += SequencingRead(rGroup(0), rGroup(1), rGroup(3), ReverseReadOrientation, umi)
-        umiReadsRVS(umi) = readBuilderR
-
-        umiReadsFWDCount(umi) = umiReadsFWDCount.getOrElse(umi, 0) + 1
-        umiReadsRVSCount(umi) = umiReadsRVSCount.getOrElse(umi, 0) + 1
-      } else {
-        umiReadsFWDNoPrim(umi) = umiReadsFWDNoPrim.getOrElse(umi, 0) + 1
-        umiReadsRVSNoPrim(umi) = umiReadsRVSNoPrim.getOrElse(umi, 0) + 1
-      }
+      umiReads(umi).addRead(fwd, containsForward, rev, containsReverse)
 
       readsProcessed += 1
       if (readsProcessed % 10000 == 0)
@@ -181,58 +168,10 @@ object UMIProcessing extends App {
 
     val umiStats = new PrintWriter(config.outputUMIStats)
     umiStats.write("umi\tforward.reads.with.adapter\treverse.reads.with.adapter\tforward.reads.without.adapter\treverse.reads.without.adapter\n")
-    umisTotal.foreach { case (umi, exists) => umiStats.write(umi + "\t" + umiReadsFWDCount.getOrElse(umi, 0) + "\t" + umiReadsRVSCount.getOrElse(umi, 0) + "\t" +
-      umiReadsFWDNoPrim.getOrElse(umi, 0) + "\t" + umiReadsRVSNoPrim.getOrElse(umi, 0) + "\n")
+    umiReads.foreach { case (umi, readContainer) => umiStats.write(umi + "\t" + readContainer.totalPassedReads + "\t" + readContainer.totalPassedReads + "\t" +
+      readContainer.noPrimer1 + "\t" + readContainer.noPrimer2 + "\n")
     }
     umiStats.close()
-
-    // --------------------------------------------------------------------------------
-    // for each UMI combination, downsample to the best X reads, and use those during
-    // the merging process.  This helps us both in computational time as well as
-    // removing bad reads that will just mess with us later
-    // --------------------------------------------------------------------------------
-    val umiReadsFWDReplacements = new mutable.HashMap[String, Array[SequencingRead]]()
-    val umiReadsRVSReplacements = new mutable.HashMap[String, Array[SequencingRead]]()
-    val umiReadsFWDReplacementsCounts = new mutable.HashMap[String, Int]()
-    val umiReadsRVSReplacementsCounts = new mutable.HashMap[String, Int]()
-
-    val downsampleSize = 40
-    val minReads = 5
-    var tooFewReadsUMI = 0
-    var downsampledUMI = 0
-    var justRightUMI = 0
-
-    umiReadsFWD foreach { case (umi, fReadsBuilder) => {
-      val fReads = fReadsBuilder.toArray
-      val rReads = umiReadsRVS(umi).toArray
-
-      umiReadsFWDReplacementsCounts(umi) = fReads.size
-      umiReadsRVSReplacementsCounts(umi) = rReads.size
-
-      if (fReads.size > downsampleSize) {
-        downsampledUMI += 1
-        umiReadsFWDReplacements(umi) = Downsampler.downsample(fReads, downsampleSize)
-        //println("downsampled forward UMI " + umi + " from " + fReads.size + " to " + umiReadsFWDReplacements(umi).size)
-      } else if (fReads.size > minReads) {
-        umiReadsFWDReplacements(umi) = fReads
-        justRightUMI += 1
-      } else {
-        tooFewReadsUMI += 1
-      }
-
-
-      if (rReads.size > downsampleSize) {
-        umiReadsRVSReplacements(umi) = Downsampler.downsample(rReads, downsampleSize)
-        //println("downsampled reverse UMI " + umi + " from " + fReads.size + " to " + umiReadsFWDReplacements(umi).size)
-      } else if (rReads.size > minReads) {
-        umiReadsRVSReplacements(umi) = rReads
-      }
-    }
-    }
-    println("Downsampled UMIs to a maximum of " + downsampleSize + " reads")
-    println("Downsampled UMIs:" + downsampledUMI)
-    println("To few reads UMIs:" + tooFewReadsUMI)
-    println("UMIs kept as is:" + justRightUMI)
 
 
     var passingUMI = 0
@@ -244,17 +183,17 @@ object UMIProcessing extends App {
     // --------------------------------------------------------------------------------
     // for each UMI -- process the collection of reads
     // --------------------------------------------------------------------------------
-    umiReadsFWDReplacements.foreach { case (umi, reads) => {
-      //println(umi)
-      val reverseReads = umiReadsRVSReplacements(umi)
-      val forwardReads = umiReadsFWDReplacements(umi)
+    umiReads.foreach { case (umi, reads) => {
 
-      if (forwardReads.length > config.minimumUMIReads && reverseReads.length > config.minimumUMIReads) {
+      if (reads.size > config.minimumUMIReads) {
+        //print(umi + " - " + reads.size() + ",")
+        val (fwdReads, revReads) = reads.toPairedFWDREV()
+
         val res = UMIMerger.mergeTogether(umi,
-          forwardReads,
-          reverseReads,
-          umiReadsFWDReplacementsCounts(umi),
-          umiReadsRVSReplacementsCounts(umi),
+          fwdReads,
+          revReads,
+          reads.size(),
+          reads.size(),
           cutsSiteObj,
           outputFastq1File,
           outputFastq2File,
@@ -269,13 +208,11 @@ object UMIProcessing extends App {
         passingUMI += res
       }
       index += 1
-      if (index % 10 == 0) {
+      if (index % 25 == 0) {
         println("INFO: Processed " + index + " umis so far")
       }
     }
     }
-
-    println("total UMIs passed:\t" + passingUMI + "\ntotal UMIs considered:\t" + umiReadsFWD.size)
 
     outputFastq1File.close()
     outputFastq2File.close()

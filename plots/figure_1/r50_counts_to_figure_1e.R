@@ -11,21 +11,22 @@ reds <- rev(RColorBrewer::brewer.pal(8, "Reds"))
 
 events <- events[events$event.count < 10,]
 
-glog = ggplot() + 
-  geom_bar(data=events[events$type == "D",], aes(x=bin, y=-1.0 * log(-1.0 * count), fill=interaction(type,event.count)),size=0.7,col="black", stat="identity", position="stack") + 
-  geom_bar(data=events[events$type == "I",], aes(x=bin, y=log(count), fill=interaction(type,event.count)),size=0.7,col="black", stat="identity", position="stack") + 
-  theme_classic() +
-  scale_fill_manual(values = c(reds,blues)) + 
-  ylab("Log occurance") + 
-  xlab("Insertion or deletion size")
-ggsave(glog,file="log_edit_sizes_r50high.pdf",width=15,height=6)
+#glog = ggplot() + 
+#  geom_bar(data=events[events$type == "D",], aes(x=bin, y=-1.0 * log(-1.0 * count), fill=interaction(type,event.count)),size=0.7,col="black", stat="identity", position="stack") + 
+#  geom_bar(data=events[events$type == "I",], aes(x=bin, y=log(count), fill=interaction(type,event.count)),size=0.7,col="black", stat="identity", position="stack") + 
+#  theme_classic() +
+#  scale_fill_manual(values = c(reds,blues)) + 
+#  ylab("Log occurance") + 
+#  xlab("Insertion or deletion size")
+#ggsave(glog,file="log_edit_sizes_r50high.pdf",width=15,height=6)
 
 gnorm = ggplot() + 
   geom_bar(data=events[events$type == "D",], aes(x=bin, y=count, fill=interaction(type,event.count)),size=0.7, col="black", stat="identity", position="stack") + 
   geom_bar(data=events[events$type == "I",], aes(x=bin, y=count, fill=interaction(type,event.count)),size=0.7, col="black", stat="identity", position="stack") + 
   theme_classic() +
-  scale_fill_manual(values = c(reds,blues)) + 
-  ylab("Occurance") + 
-  xlab("Insertion or deletion size")
+  scale_fill_manual(values = c(reds,blues),guide = guide_legend(title = "Event Size"), breaks = round(seq(min(dat$y), max(dat$y), by = 5000))) + 
+  ylab("Occurrences") + 
+  xlab("Event size of edits") + 
+  theme(text=element_text(family="Helvetica", face="bold", size=20))
 ggsave(gnorm,file="nonlog_edit_sizes_r50high.pdf",width=15,height=6)
 

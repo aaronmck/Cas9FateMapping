@@ -109,8 +109,6 @@ object AlignmentManager {
           if (debugInfo)
             println("3: " + refToEvent.map { st => st.prettyPrint }.mkString("<>") + " " + refToEvent.size)
         }
-
-
       }
     }}
 
@@ -192,11 +190,26 @@ object AlignmentManager {
       matchRate2._2,
       combined._2,
       combined._3,
-      combined._1)
+      combined._1,
+      alignmentsF(1).bases,
+      alignmentsF(0).bases,
+      alignmentsR(1).bases,
+      alignmentsR(0).bases
+    )
   }
 
   // an inline case class to make the return of a cutsite call more readable
-  case class PairedReadCutSiteEvent(matchingRate1: Double, matchingBaseCount1: Int, matchingRate2: Double, matchingBaseCount2: Int,  alignments: Array[String],basesOverTargets: Array[String], collision: Boolean)
+  case class PairedReadCutSiteEvent(matchingRate1: Double,
+                                    matchingBaseCount1: Int,
+                                    matchingRate2: Double,
+                                    matchingBaseCount2: Int,
+                                    alignments: Array[String],
+                                    basesOverTargets: Array[String],
+                                    collision: Boolean,
+                                    read1: String,
+                                    read1Ref: String,
+                                    read2: String,
+                                    read2Ref: String)
 
   /**
    * given a read and reference, align and call events at the cut-sites
@@ -253,7 +266,7 @@ object AlignmentManager {
    * @param readSequences the read sequences -- we have to choose the right one in the two read case
    * @param cutSites the cutsites over the reference we consider
    * @param debug should we dump a lot of debugging info
-   * @return a tuple2 of: an indicator if there was a collision between edits, and an array of events over the target cut sites
+   * @return a tuple3 of: an indicator if there was a collision between edits, and an array of events over the target cut sites
    */
   def editsToCutSiteCalls(readAlignments: List[List[Alignment]],
                           readSequences: List[List[String]],

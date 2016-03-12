@@ -24,7 +24,7 @@ object Waterman extends Aligner {
 
 
   override def alignTo(reads: Array[SequencingRead], ref: Option[String], debug: Boolean): Array[SequencingRead] = {
-    alignTo(reads, ref, debug, 10.0, 0.5)
+    alignTo(reads, ref, debug, 10.0, 0.1)
   }
 
   def alignTo(reads: Array[SequencingRead], ref: Option[String], debug: Boolean, gapOpen: Double, gapExtend: Double): Array[SequencingRead] = {

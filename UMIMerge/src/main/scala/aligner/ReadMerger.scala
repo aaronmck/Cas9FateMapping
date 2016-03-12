@@ -25,6 +25,7 @@ object ReadMerger {
     var situationREVOK = false
     var situationFWDSet = false
     var situationREVSet = false
+
     alignments(0).bases.zip(alignments(1).bases).foreach { case (base1, base2) => (base1, base2) match {
       case (b1, b2) if b1 == '-' && b2 == '-' => {/* keep going */}
       case ('-',b2) => {if (!situationFWDSet) {situationFWDSet = true; situationFWDOK = false; }}
@@ -41,9 +42,6 @@ object ReadMerger {
       }
     }}
 
-    /*println(alignments(0))
-    println(alignments(1))
-    println(situationFWDOK + " " + situationREVOK + " " + situationFWDSet + " " + situationREVSet)*/
 
     alignments(0).bases.zip(alignments(1).bases).foreach { case (base1, base2) => (base1, base2) match {
       case (b1, b2) if b1 == '-' && b2 != '-' => output :+= b2
@@ -60,6 +58,7 @@ object ReadMerger {
     }
     }
 
+    println(read1.umi + "\t" + overlap + "\t" + matches + "\t" + alignments(0).bases + "\t" + alignments(1).bases + "\t" + situationFWDOK + " " + situationREVOK + " " + situationFWDSet + " " + situationREVSet)
 
     val returnRead = Aligner.SequencingReadFromNameBases("Consensus", output.filter { b => b != '-' }.mkString(""))
     return Some(ReadMergerRet(returnRead, matches, overlap, situationFWDOK & situationREVOK & situationFWDSet & situationREVSet))

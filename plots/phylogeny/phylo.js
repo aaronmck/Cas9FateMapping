@@ -7,7 +7,7 @@ var catagoricalColors = d3.scale.category20();
 // set the out and inner radius
 var outerRadius = 960 / 2,
     innerRadius = outerRadius - 170,
-    fullAngle = 360;
+    fullAngle   = 360;
 
 var svg = d3.select("#tree").append("svg")
     .attr("width", outerRadius * 2)

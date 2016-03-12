@@ -279,10 +279,10 @@ function redrawTheTopHistgram() {
             return -1 * global_height; // due to the transform
         })
         .attr("y", function (d) {
-            return 10;
+            return 0;
         })
         .attr("text-anchor", "left")
-        .style("font-size", "18px")
+        .style("font-size", "25px")
         .text(legendText)
         .attr("transform", "rotate(-90)");
 }; 
@@ -378,7 +378,7 @@ function redrawHistogram() {
 
     svgHeatRight.append("g")
         .attr("class", "x axis")
-        .attr("transform", "translate(0," + 90 + ")")
+        .attr("transform", "translate(0," + 85 + ")")
         .call(xAxis)
         .selectAll("text")
         .style("text-anchor", "end")
@@ -410,18 +410,18 @@ function redrawHistogram() {
     //Add the text legend
     svgHeatRight.append("text")
         .attr("x", function (d) {
-            return 15;
+            return 0;
         })
         .attr("y", function (d) {
             if (xScaleIsLog) {
                 return global_height - 70;
             } else {
-                return global_height - 90;
+                return global_height - 100;
             }
         })
         .attr("text-anchor", "left")
-        .style("font-size", "18px")
-        .text("Number of HMIDs");
+        .style("font-size", "25px")
+        .text("Number of cells");
 
 }
 

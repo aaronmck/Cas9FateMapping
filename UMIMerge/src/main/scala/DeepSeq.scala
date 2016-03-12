@@ -147,7 +147,7 @@ object DeepSeq extends App {
 
     outputStatsFile.outputStatEntry(StatsContainer(mergedRead.read.name, pass, containsFwdPrimer, containsRevPrimer,
       false, true, baseLen, -1, 1, 1, callEvents.matchingRate, -1.0, callEvents.matchingBaseCount, -1,
-      callEvents.alignments, callEvents.basesOverTargets))
+      callEvents.alignments, callEvents.basesOverTargets, None, None, Some(mergedRead.read.bases), None, None, Some(mergedRead.reference.bases)))
 
   }
 
@@ -178,7 +178,7 @@ object DeepSeq extends App {
 
     outputStatsFile.outputStatEntry(StatsContainer(readPairs.pair1.read.name, pass, containsFwdPrimer, containsRevPrimer,
       false, false, base1Len, base2Len, 1, 1, callEvents.matchingRate1, callEvents.matchingRate2, callEvents.matchingBaseCount1, callEvents.matchingBaseCount2,
-      callEvents.alignments, callEvents.basesOverTargets))
+      callEvents.alignments, callEvents.basesOverTargets, Some(readPairs.pair1.read.bases), Some(readPairs.pair2.read.bases), None, Some(readPairs.pair1.reference.bases), Some(readPairs.pair2.reference.bases), None))
 
   }
 }

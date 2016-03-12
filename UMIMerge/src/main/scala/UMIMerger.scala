@@ -41,8 +41,6 @@ object UMIMerger {
     val preparedFWD = Consensus.prepareConsensus(readsF, minReadLength, minMeanQualScore)
     val preparedREV = Consensus.prepareConsensus(readsR, minReadLength, minMeanQualScore)
 
-    //println("Pre forward: " + newReadsF.size + " post: " + preparedFWD.size + ", Pre reverse: " + newReadsR.size + " post: " + preparedREV.size)
-
     if (preparedFWD.size > 1 && preparedREV.size > 1) {
 
       val mergedF = MAFFT.alignTo(preparedFWD, None)
@@ -76,12 +74,12 @@ object UMIMerger {
 
         }
 
-        if (merged.isDefined && merged.get.matches > 20 && merged.get.matches.toDouble / merged.get.overlap.toDouble > 0.50 && merged.get.orientationOK) {
+        if (merged.isDefined && merged.get.matches > 20 && merged.get.matches.toDouble / merged.get.overlap.toDouble > 0.95 && merged.get.orientationOK) {
           // get the overlap of cutsite events
           try {
-            if (debug) {
+            //if (debug) {
               println("MERGED")
-            }
+            //}
             val mergedRefPair = RefReadPair(SequencingRead.readFromNameAndSeq("ref",ref),merged.get.read)
             val cutEvents = AlignmentManager.cutSiteEvent(mergedRefPair, cutSites,debug=debug)
 
@@ -94,7 +92,7 @@ object UMIMerger {
 
             outputStats.outputStatEntry(StatsContainer(umi, failureReason == "PASS" && !cutEvents.collision, forwardPrimer, reversePrimer,
               true, true, readsF.size, readsR.size, mergedF.size, mergedR.size, cutEvents.matchingRate, -1, cutEvents.matchingBaseCount, -1,
-              cutEvents.alignments, cutEvents.basesOverTargets))
+              cutEvents.alignments, cutEvents.basesOverTargets, None, None, Some(mergedRefPair.read.bases), None, None, Some(mergedRefPair.reference.bases)))
 
           } catch {
             case e: Exception => {
@@ -122,7 +120,7 @@ object UMIMerger {
 
             outputStats.outputStatEntry(StatsContainer(umi, failureReason == "PASS" && !cutEvents.collision, forwardPrimer, reversePrimer,
               true, false, readsF.size, readsR.size, mergedF.size, mergedR.size, cutEvents.matchingRate1, cutEvents.matchingRate2, cutEvents.matchingBaseCount1, cutEvents.matchingBaseCount2,
-              cutEvents.alignments, cutEvents.basesOverTargets))
+              cutEvents.alignments, cutEvents.basesOverTargets, Some(cutEvents.read1), Some(cutEvents.read2), None, Some(cutEvents.read1Ref), Some(cutEvents.read1Ref), None))
 
           } catch {
             case e: Exception => {
