@@ -17,7 +17,7 @@ object Consensus {
    * @param reads the reads to make a consensus over
    * @return a tuple, representing the concensus read and the per-base error rate over positions in that read
    */
-  def consensus(reads: Array[SequencingRead],name: String = "Consensus"): SequencingRead = {
+  def consensus(reads: Array[SequencingRead], name: String = "Consensus"): SequencingRead = {
     // each string should be the same length coming back from CLUSTAL
     var highestOccuringBase = Array[Char]()
     var highestOccuringBaseProp = Array[Double]()
@@ -47,7 +47,7 @@ object Consensus {
 
     SequencingRead(name,
       highestOccuringBase.mkString(""),
-      "H" * highestOccuringBase.length, // highestOccuringBaseProp.map{pr => Utils.probabilityOfErrorToPhredChar(1.0 - pr)}.mkString(""),
+      "I" * highestOccuringBase.length, //highestOccuringBaseProp.map{pr => Utils.probabilityOfErrorToPhredChar(1.0 - pr)}.mkString(""), //
       if (reads.size == 0) ForwardReadOrientation else reads(0).readOrientation,
       "")
   }
@@ -88,19 +88,6 @@ object Consensus {
     if (throwExceptionIfNoRef && refRead.size != 1)
       throw new IllegalStateException("Unable to find one and only reference sequence in the reads, instead we saw " + refRead.size)
     (fwdReads, revReads, refRead)
-  }
-
-  /**
-   * given forward and backwards reads (throw in a reference read to be sure), call cigar events from it
-   * @param reads the reads to develop a consensus from, including a reference read
-   * @return a read with the dashes split-out
-   */
-  def dualConsensus(reads: Array[SequencingRead], minReadLength: Int, minMeanQualScore: Double): Array[SequencingRead] = {
-
-    val (fwdReads: Array[SequencingRead], revReads: Array[SequencingRead], refRead: Array[SequencingRead]) = splitReadsToFwdRevRefArrays(reads)
-
-    // get the forward and reverse consensus for each read
-    Array[SequencingRead](consensus(fwdReads), consensus(revReads))
   }
 
   /**

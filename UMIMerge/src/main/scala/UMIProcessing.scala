@@ -45,14 +45,9 @@ case class Config(inputFileReads1: File = new File(UMIProcessing.NOTAREALFILENAM
                   inputFileReads2: File = new File(UMIProcessing.NOTAREALFILENAME),
                   outputFastq1: File = new File(UMIProcessing.NOTAREALFILENAME),
                   outputFastq2: File = new File(UMIProcessing.NOTAREALFILENAME),
-                  outputStats: File = new File(UMIProcessing.NOTAREALFILENAME),
-                  outputUMIStats: File = new File(UMIProcessing.NOTAREALFILENAME),
-                  outputAlignments: File = new File(UMIProcessing.NOTAREALFILENAME),
-                  cutSites: File = new File(UMIProcessing.NOTAREALFILENAME),
-                  umiLength: Int = 1,
+                  umiLength: Int = 10,
                   umiStartPos: Int = 0,
                   primersEachEnd: File = new File(UMIProcessing.NOTAREALFILENAME),
-                  reference: File = new File(UMIProcessing.NOTAREALFILENAME),
                   samplename: String = "TEST",
                   minimumUMIReads: Int = 5,
                   minimumSurvivingUMIReads: Int = 2)
@@ -73,14 +68,10 @@ object UMIProcessing extends App {
     opt[File]("inputFileReads2") required() valueName ("<file>") action { (x, c) => c.copy(inputFileReads2 = x) } text ("second reads file")
     opt[File]("outputFastq1") required() valueName ("<file>") action { (x, c) => c.copy(outputFastq1 = x) } text ("the output stats file")
     opt[File]("outputFastq2") required() valueName ("<file>") action { (x, c) => c.copy(outputFastq2 = x) } text ("the output stats file")
-    opt[File]("outputStats") required() valueName ("<file>") action { (x, c) => c.copy(outputStats = x) } text ("the output stats file")
-    opt[File]("outputUMIStats") required() valueName ("<file>") action { (x, c) => c.copy(outputUMIStats = x) } text ("the output stats file")
-    opt[File]("cutSites") required() valueName ("<file>") action { (x, c) => c.copy(cutSites = x) } text ("the location of the cutsites")
     opt[File]("primersEachEnd") required() valueName ("<file>") action { (x, c) => c.copy(primersEachEnd = x) } text ("the file containing the amplicon primers requred to be present, one per line, two lines total")
     opt[Int]("minimumUMIReads") action { (x, c) => c.copy(minimumUMIReads = x) } text ("the minimum number of reads that each UMI should have to be considered signal and not noise")
     opt[Int]("minimumSurvivingUMIReads") action { (x, c) => c.copy(minimumSurvivingUMIReads = x) } text ("the minimum number of reads that each UMI should have post filtering")
 
-    opt[File]("reference") required() action { (x, c) => c.copy(reference = x) } text ("the reference (as a fasta)")
     opt[Int]("umiStart") required() action { (x, c) => c.copy(umiStartPos = x) } text ("the start position, zero based, of our UMIs")
     opt[Int]("umiLength") required() action { (x, c) => c.copy(umiLength = x) } text ("the length of our UMIs")
     opt[String]("samplename") required() action { (x, c) => c.copy(samplename = x) } text ("the sample name of this run")
@@ -111,12 +102,6 @@ object UMIProcessing extends App {
     // our output files
     val outputFastq1File = new PrintWriter(config.outputFastq1)
     val outputFastq2File = new PrintWriter(config.outputFastq2)
-    val cutsSiteObj = CutSites.fromFile(config.cutSites, 3)
-    val outputStatsFile = new StatsOutput(config.outputStats,cutsSiteObj.size)
-
-    // get the reference as a string
-    var referenceString = ""
-    Source.fromFile(config.reference).getLines().foreach { line => if (!line.startsWith(">")) referenceString += line }
 
     // setup clustered input of the fastq files
     // ------------------------------------------------------------------------------------------
@@ -166,56 +151,40 @@ object UMIProcessing extends App {
     }
     }
 
-    val umiStats = new PrintWriter(config.outputUMIStats)
-    umiStats.write("umi\tforward.reads.with.adapter\treverse.reads.with.adapter\tforward.reads.without.adapter\treverse.reads.without.adapter\n")
-    umiReads.foreach { case (umi, readContainer) => umiStats.write(umi + "\t" + readContainer.totalPassedReads + "\t" + readContainer.totalPassedReads + "\t" +
-      readContainer.noPrimer1 + "\t" + readContainer.noPrimer2 + "\n")
-    }
-    umiStats.close()
-
-
     var passingUMI = 0
     var totalWithUMI = 0
-
-    var index = 0
-
 
     // --------------------------------------------------------------------------------
     // for each UMI -- process the collection of reads
     // --------------------------------------------------------------------------------
+    var index = 1
     umiReads.foreach { case (umi, reads) => {
 
       if (reads.size > config.minimumUMIReads) {
-        //print(umi + " - " + reads.size() + ",")
         val (fwdReads, revReads) = reads.toPairedFWDREV()
 
         val res = UMIMerger.mergeTogether(umi,
           fwdReads,
           revReads,
-          reads.size(),
-          reads.size(),
-          cutsSiteObj,
+          reads.totalPassedReads,
+          reads.totalPassedReads,
           outputFastq1File,
           outputFastq2File,
-          outputStatsFile,
-          referenceString,
-          config.reference,
           primers,
           config.samplename,
           config.minimumSurvivingUMIReads,
-          cutsSiteObj)
+          index)
 
         passingUMI += res
       }
-      index += 1
-      if (index % 25 == 0) {
+      if (index % 50 == 0) {
         println("INFO: Processed " + index + " umis so far")
       }
+      index += 1
     }
     }
 
     outputFastq1File.close()
     outputFastq2File.close()
-    outputStatsFile.close()
   }
 }

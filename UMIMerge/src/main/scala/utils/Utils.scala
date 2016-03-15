@@ -14,7 +14,7 @@ object Utils {
   def phredCharToDouble(ch: Char): Double = math.pow(10,((ch.toInt -32) / 10.0) * -1.0)
   def phredCharToQscore(ch: Char): Int = (ch.toInt -32)
   def probabilityOfErrorToPhredInt(vl: Double): Int = math.round(-10.0 * math.log10(vl)).toInt
-  def probabilityOfErrorToPhredChar(vl: Double): Char = (probabilityOfErrorToPhredInt(vl) + 32).toChar
+  def probabilityOfErrorToPhredChar(vl: Double): Char = (probabilityOfErrorToPhredInt(vl) + 33).toChar
 
   // read in compressed input streams with scala source commands
   def gis(s: String) = new GZIPInputStream(new BufferedInputStream(new FileInputStream(s)))

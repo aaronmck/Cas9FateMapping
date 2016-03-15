@@ -15,7 +15,8 @@ case class SequencingRead(name: String, bases: String, quals: String, readOrient
 
   /**
    * find the last base in the string before a series of dashes
-   * @return an integer of the last position in a read that's not a dash
+    *
+    * @return an integer of the last position in a read that's not a dash
    */
   def trueEnd(): Int = {
     ((bases.length - 1).until(-1,-1)).foreach{i => if (bases(i) != '-') return i}
@@ -24,7 +25,8 @@ case class SequencingRead(name: String, bases: String, quals: String, readOrient
 
   /**
    * slice a read at a position, producing a read with appropriate qual scores
-   * @param fromPos the base to start at, inclusive
+    *
+    * @param fromPos the base to start at, inclusive
    * @param toPos the base to end at, inclusive
    * @return a new SequencingRead representing the sliced-down version
    */
@@ -41,21 +43,22 @@ case class SequencingRead(name: String, bases: String, quals: String, readOrient
 
   /**
    * filter the reads down by a specific combination of quality score drop over a window
-   * @param windowSize the sliding window to filter over
+    *
+    * @param windowSize the sliding window to filter over
    * @param minWindowQual the qual score we have to achive over a window to keep the rest of the read
    */
   def qualityThresholdRead(windowSize: Int = 5, minWindowQual: Double = 10): SequencingRead = {
     val cutPos = intQuals.toArray.sliding(windowSize).zipWithIndex.map{case(basesInWindow,index) => {
       if (basesInWindow.sum / windowSize.toDouble < minWindowQual) {
-        //println("for read " + bases + " found a window with qual of " +  (basesInWindow.sum / windowSize.toDouble) + " at position " + index)
+        println("for read " + bases + " found a window with qual of " +  (basesInWindow.sum / windowSize.toDouble) + " at position " + index)
         index
       } else
         0
     }}.filter(x => x != 0).toArray
-    //println("quals = " + (quals.zip(bases).zipWithIndex.map{case((ql,bs),index) => index + "--" + bs + "," + Utils.phredCharToQscore(ql)}.mkString(";")))
-    //println("for read " + bases + " the cut pos is " + cutPos.mkString(","))
+    println("quals = " + (quals.zip(bases).zipWithIndex.map{case((ql,bs),index) => index + "--" + bs + "," + Utils.phredCharToQscore(ql)}.mkString(";")))
+    println("for read " + bases + " the cut pos is " + cutPos.mkString(","))
     if (cutPos.size > 0) {
-      //println(cutPos(0))
+      println(cutPos(0))
       val cutMinusWindow = math.max(0, cutPos(0) - minWindowQual)
       SequencingRead(name, bases.slice(0, cutPos(0)), quals.slice(0, cutPos(0)), readOrientation, umi)
     } else
@@ -64,7 +67,8 @@ case class SequencingRead(name: String, bases: String, quals: String, readOrient
 
   /**
    * find the 'distance' between this read and another
-   * @param read2 the second sequencing read to consider
+    *
+    * @param read2 the second sequencing read to consider
    * @return a double, the mismatched bases, normalized by the *longer* of the two read lengths
    */
   def distance(read2: SequencingRead): Double =
@@ -79,7 +83,8 @@ case class SequencingRead(name: String, bases: String, quals: String, readOrient
 
   /**
    * does the read contain the name primer?
-   * @param primer the primer sequence (please make sure the reverse complement is done for reverse reads)
+    *
+    * @param primer the primer sequence (please make sure the reverse complement is done for reverse reads)
    * @param window the window of bases added to the primer length when searching the beginning of the read
    * @return true if the read starts with the primer
    */
@@ -89,7 +94,7 @@ case class SequencingRead(name: String, bases: String, quals: String, readOrient
    *
    * @return a string representing the read in fastq format
    */
-  def toFastqString(umi: String, rev: Boolean): String = {
+  def toFastqString(umi: String, rev: Boolean, index: Int, stripFromFront: Int): String = {
     val plusOrMinus = readOrientation match {
       case ForwardReadOrientation => "+"
       case ReverseReadOrientation => "+" // nevermind, this is not imporant
@@ -97,16 +102,17 @@ case class SequencingRead(name: String, bases: String, quals: String, readOrient
       case ConsensusRead => "+" // ehh lets assume
     }
     if (!rev)
-      "@" + umi + "_" + name + "\n" + bases + "\n" + plusOrMinus + "\n" + quals
+      "@NS500488:132:H7JCTAFXX:1:11101:8025:" + index + " " + umi + "_" + name + "\n" + bases.slice(stripFromFront,bases.length) + "\n" + plusOrMinus + "\n" + quals.slice(stripFromFront,quals.length)
     else
-      "@" + umi + "_" + name + "\n" + Utils.reverseComplement(bases) + "\n" + plusOrMinus + "\n" + quals
+      "@NS500488:132:H7JCTAFXX:1:11101:8025:" + index + " " + umi + "_" + name + "\n" + Utils.reverseComplement(bases.slice(stripFromFront,bases.length)) + "\n" + plusOrMinus + "\n" + quals.slice(stripFromFront,quals.length)
   }
 
 
   /**
    * find the first and last non-deletion character in a read -- useful when we align to the reference
    * and we want to remove cruft like reading into adapters, etc
-   * @return a tuple pair of the first non-dash base and last non-dash base (zero-indexed)
+    *
+    * @return a tuple pair of the first non-dash base and last non-dash base (zero-indexed)
    */
   def firstAndLastActualBases(): Tuple2[Int,Int] = {
     var firstNonDash = 0
@@ -285,7 +291,8 @@ case class SequencingRead(name: String, bases: String, quals: String, readOrient
 object SequencingRead {
   /**
    * produce a reverse complement of a read, taking some care to correspond the bases and quals
-   * @param sequencingRead the sequencing read to reverse
+    *
+    * @param sequencingRead the sequencing read to reverse
    * @return a sequencingread object that represents the reverse read
    */
   def reverseComplement(sequencingRead: SequencingRead): SequencingRead = {
@@ -298,7 +305,8 @@ object SequencingRead {
 
   /**
    * strip the insertions out of a read, most likely for output
-   * @param sequencingRead the input read
+    *
+    * @param sequencingRead the input read
    * @return a sequencing read representation of the read with insertions stripped out
    */
   def stripDownToJustBases(sequencingRead: SequencingRead): SequencingRead = {
@@ -317,7 +325,8 @@ object SequencingRead {
 
   /**
    * this is for testing
-   * @param name read name
+    *
+    * @param name read name
    * @param bases bases as a string
    * @return a seq read with quality H
    */
@@ -327,7 +336,8 @@ object SequencingRead {
 
   /**
    * this is for testing
-   * @param name read name
+    *
+    * @param name read name
    * @param bases bases as a string
    * @param qualBase as a string
    * @return a seq read with quality H
@@ -343,7 +353,8 @@ object SequencingReadQualOrder extends Ordering[SequencingRead] {
 
 /**
  * the cigar event
- * @param encoding the encodings string
+  *
+  * @param encoding the encodings string
  */
 sealed abstract class CigarEvent(var encoding: String = "U")
 case object Unset extends CigarEvent("U")
