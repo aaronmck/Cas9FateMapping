@@ -1,0 +1,393 @@
+// ----------------------------------------------------------------------
+// A javascript / D3 script to take data from lineage tracing experiments
+// and plot edits over the barcoded regions we have
+//
+// December 7th, 2015
+//
+// ----------------------------------------------------------------------
+
+// the total width of the plots on the right and left sides
+
+var numberToType = {"0": "match", "1": "deletion", "2": "insertion"};
+
+// sizes for various bounding boxes
+var global_width = 800;
+var global_height = 100;
+var heat_height = 400;
+var margin_left = 0;
+var right_histo_width = 200;
+
+// colors we use for events throughout the plots
+// 1) color for unedited
+// 2) color for deletions
+// 3) color for insertions
+// 3) color for mismatch? might be useful for TYR data
+var heatmap_colors = ['#FFFFFF', '#FF0000', '#1A63FF', '#00FF00'];
+
+// the labels for types of events we support in the input data
+var mutation_values = ["reference", "insertion", "deletion", "mismatch"];
+var maxValue = mutation_values.length;
+
+// state data -- these are a hack to get around the async data loading in D3 -- sorry!
+var xScaleIsLog = false
+var topScaleIsLog = false
+occurance_data = ""
+read_block_data = ""
+
+// constant for the maximum height of a row in the heatmap and corresponding righthand barchart
+var maxReadHeight = 15
+
+// to give the plots on the bottom a cleaner look, crop the bar sizes to a proportion of their total height (to give white boundries between)
+var cropHeightProp = 0.8
+
+// plot up to this many HMID reads on the plot
+var topHMIDs = 100
+
+// how much we should offset the charts
+var totalOffset = 100
+
+// from http://bl.ocks.org/mbostock/7621155
+var superscript = "⁰¹²³⁴⁵⁶⁷⁸⁹",
+    formatPower = function(d, i) {
+        return (d + "").split("").map(function(c) { return superscript[c]; }).join("");
+    };
+
+// ************************************************************************************************************
+// setup the SVG panels
+// ************************************************************************************************************
+var svgHeat = d3.select("#heatmap").append("svg")
+    .attr("width", global_width)
+    .attr("height", heat_height)
+    .append("g")
+    .attr("transform", "translate(0," + 100 + ")")
+    
+var svgHeatRight = d3.select("#heatmapRight")
+    .append("svg")
+    .attr("width", right_histo_width)
+    .attr("height", global_width)
+    .append("g")
+    
+
+var histogram_top_data = ""
+var cut_site_data = ""
+
+occurance_file = "Figure5B_Clades.allReadCounts"
+
+function changeHistogram() {
+    d3.select("#heatmapRight").select("svg").remove();
+    
+    svgHeatRight = d3.select("#heatmapRight")
+        .append("svg")
+        .attr("width", right_histo_width)
+        .attr("height", global_width)
+        .append("g")
+
+    if (xScaleIsLog) {
+        xScaleIsLog = false
+    } else {
+        xScaleIsLog = true
+    }
+    redrawHistogram()
+}
+
+// ************************************************************************************************************
+// histogram on the right
+// ************************************************************************************************************
+function redrawHistogram() {
+
+    var local_occur_data = occurance_data.filter(function(d){ return +d.array <= topHMIDs; })
+
+    
+    // find the maximum number of reads
+    var readCount = d3.max(local_occur_data.map(function (d) {return +d.array;})) + 1;
+    var gridHeight = Math.min(maxReadHeight, parseInt(heat_height / readCount));
+    var totalHistoHeight = gridHeight * readCount
+    
+    formatter = d3.format("2");
+    var yScale = d3.scale.ordinal().domain(local_occur_data.map(function (d) {
+        return d.array;
+    })).rangeBands([0, totalHistoHeight]);
+    
+    var yAxis = d3.svg.axis().scale(yScale).orient("left").ticks(4)
+        .tickFormat(formatter)
+        .outerTickSize(0);
+
+    // are we using linear or log scales? setup the axis either way
+    // --------------------------------------------------------------------------------
+    prescale = d3.scale.linear().domain([0, d3.max(local_occur_data, function (d) {
+        return +d.count
+    })]).range([0, 150]).nice();
+
+    var xAxis = d3.svg.axis().scale(prescale).orient("top")
+    if (xScaleIsLog) {
+        var maxVal = d3.max(local_occur_data, function (d) {return +d.count})
+        var minVal = d3.min(local_occur_data, function (d) {return +d.count})
+        prescale = d3.scale.log().domain([minVal, maxVal]).range([0, 150]).nice();
+        xAxis = d3.svg.axis().scale(prescale).orient("top").tickSize(6); // .tickFormat(function(d) { return "10" + formatPower(Math.round(Math.log(d))); });
+    }
+
+    var mutbox2 = svgHeatRight.selectAll(".bar")
+        .data(local_occur_data)
+        .enter().append("svg:g")
+        .attr("class", "cause")
+        .style("fill", function (d, i) {
+            return heatmap_colors[0];
+        })
+       .style("stroke", function (d, i) {
+            return "gray";
+        });
+   
+    var wt_colors = ['#000000', '#00FF00', '#555555', '#117202', '#333333'];
+
+    mutbox2.selectAll(".bar")
+        .data(local_occur_data)
+        .enter().append("rect")
+        .attr("class", "bar")
+        .attr("x", function (d) {
+            return 3;
+        })
+        .attr("width", function (d) {
+            return Math.max(0.5,prescale(+d.count));
+        })
+        .attr("y", function (d) {
+            return yScale(+d.array) + ((0.25) * gridHeight);
+        })
+        .attr("height", function (d) {
+            return gridHeight * 0.7;
+        })
+        .style("fill", function (d, i) {
+            return wt_colors[2]; //+d.WT];
+        })
+        .style("stroke", function (d, i) {
+            return wt_colors[2]; // +d.WT + 2];
+        });
+
+    svgHeatRight.append("g")
+        .attr("class", "x axis")
+        .attr("transform", "translate(0," + 100 + ")")
+        .call(xAxis)
+        .selectAll("text")
+        .style("text-anchor", "end")
+        .attr("dx", "-.8em")
+        .attr("dy", ".15em")
+        .attr("transform", "rotate(90)")
+        .attr("y", 1)
+
+    // this is really hacky, but I can't seem to programmaticly slim down the number of ticks on the x axis in log mode, so do it by hand
+    if (xScaleIsLog) {
+        svgHeatRight.selectAll(".tick")
+            .each(function (d, i) {
+                if (d == 0 || this.textContent == "" || !(Math.log10(+this.textContent) % 1 === 0)) {
+                    this.remove();
+                } else {
+                    var valueToConvert = +this.textContent
+                    this.children[1].textContent = "10" + formatPower(Math.log10(valueToConvert))
+                }
+            });
+    } else {
+        svgHeatRight.selectAll(".tick")
+            .each(function (d, i) {
+                if (i % 2 == 0) {
+                    this.remove();
+                }
+            });
+    }
+
+    //Add the text legend
+    svgHeatRight.append("text")
+        .attr("x", function (d) {
+            return 0;
+        })
+        .attr("y", function (d) {
+            if (xScaleIsLog) {
+                return -30
+            } else {
+                return -30
+            }
+        })
+        .attr("text-anchor", "left")
+        .style("font-size", "25px")
+        .text("Number of cells");
+
+}
+
+d3.tsv(occurance_file, function (error, data) {
+    occurance_data = data
+    redrawHistogram();
+
+    read_block_data = data
+    redraw_read_block();
+});
+
+// ************************************************************************************************************
+// read plots -- add a block for each of the high frequency reads we observe
+// ************************************************************************************************************
+function redraw_read_block() {
+    var startRegion = 110
+    var endRegion = 416
+    
+    var local_rbd = read_block_data.map(function(obj, index) {
+	return padWithMatches(hmidToEvents(obj.event, index),startRegion,endRegion, index)
+    })
+    local_rbd = [].concat.apply([], local_rbd);    
+    var readCount = read_block_data.length
+    
+    var gridHeight = Math.min(maxReadHeight, parseInt(heat_height / readCount));
+    var totalHeatHeight = gridHeight * readCount
+
+    var maxVal = endRegion - startRegion // endPos // d3.max(local_rbd , function (d) {return +d.length})
+    //var minVal = startRegion // startPos // d3.min(local_rbd , function (d) {return +d.position})
+    
+    // the scales and axis for the heatmap data
+    var yScale = d3.scale.linear().domain([0,readCount]).range([0, totalHeatHeight]);
+    
+    var xScale = d3.scale.linear().domain([0,maxVal]).range([margin_left, global_width]);
+    var maxXPlot = xScale(maxVal)
+
+    var dmt = xScale.domain().length;
+    var gridWidth = parseInt((global_width - margin_left) / dmt);
+    var gridOffset = parseInt(gridWidth + (gridWidth / 2));
+    var max = d3.entries(local_rbd ).sort(function (a, b) {
+            return d3.descending(+a.value.position, +b.value.position);
+        }
+    )[0].value.position;
+
+    var min = d3.entries(local_rbd ).sort(function (a, b) {
+            return d3.ascending(+a.value.position, +b.value.position);
+        }
+    )[0].value.position;
+
+    var heatMap = svgHeat.selectAll(".heatmap")
+        .data(local_rbd )
+        .enter().append("svg:rect")
+        .attr("x", function (d, i) {
+            return xScale(+d.pos)
+        })
+        .attr("y", function (d, i) {
+            return yScale(+d.array) + ((1.0 - cropHeightProp) * gridHeight)
+        })
+        .attr("width", function (d) {
+	    return xScale(+d.len);
+        })
+        .attr("height", function (d) {
+            return gridHeight * cropHeightProp;
+        })
+        .style("fill", function (d) {
+            return heatmap_colors[+d.typ];
+        })
+	.style("stroke", function (d) {
+            return "gray";
+        })
+};
+
+function changeSelection() {
+    var e = document.getElementById("topX");
+    topHMIDs = +e.options[e.selectedIndex].value;
+
+    d3.select("#heatmap").select("svg").remove();
+
+    svgHeat = d3.select("#heatmap").append("svg")
+	.attr("width", global_width)
+	.attr("height", heat_height)
+	.append("g")
+
+    d3.select("#heatmapRight").select("svg").remove();
+    
+    svgHeatRight = d3.select("#heatmapRight")
+        .append("svg")
+        .attr("width", right_histo_width)
+        .attr("height", global_width)
+        .append("g")
+    
+    redraw_read_block();
+    redrawHistogram();
+}
+
+
+
+var match = 0
+var insertion = 2
+var deletion = 1
+
+function drawNodes(svgObj, eventArray, d, barLength,size, barHeight) {
+    // scale from the event window to the barlength on the screen
+    var scaleX = d3.scale.linear().range([0,barLength]).domain([0,size])
+    var heatmap_colors = ['#FFFFFF','#CE343F','#2E4D8E','#D49E35'];
+    
+    for (i = 0; i < eventArray.length; i++) {
+	var rectangle = svgObj.append("rect")
+	    .attr('fill', heatmap_colors[eventArray[i].typ] )
+	    .attr('stroke', '#111')
+	    .attr('stroke-width', bar_stroke_width)
+	    .attr("width", barHeight)
+	    .attr("height", function(d) {return scaleX(eventArray[i].len)})
+	    .attr("transform","translate(" + (event_location + scaleX(eventArray[i].pos)) + "," + (d.x + barHeight/2.0) + ") rotate(-90) ");
+    }
+}
+
+
+function padWithMatches(eventObjectArray, start, end, arrayVal) {
+    var resultsArray = [];
+    for (i = 0; i < eventObjectArray.length; i++) {
+        var curEvt = offsetByStart(eventObjectArray[i],start, arrayVal)
+	
+        // we haven't added an event yet, pad to the beginning of the target region with a match
+        if (resultsArray.length == 0) {
+            if (curEvt.pos > 0) { // we've offset by the start, so the beginning is now zero
+                resultsArray.push({typ: match, len: curEvt.pos, pos: 0, array: arrayVal})
+            }
+            resultsArray.push(curEvt)
+        }
+        // we have values in the array, pad matches between events
+        else {
+            if (curEvt.pos > resultsArray[resultsArray.length -1].pos + resultsArray[resultsArray.length -1].len) {
+                resultsArray.push({typ: match, len: curEvt.pos - (resultsArray[resultsArray.length -1].pos + resultsArray[resultsArray.length -1].len), pos: resultsArray[resultsArray.length
+																					  -1].pos + resultsArray[resultsArray.length -1].len, array: arrayVal})
+            }
+            resultsArray.push(curEvt)
+        }
+    }
+    // now pad the end -- if the last event doesn't run all the way to the end pos, add matches
+    if (resultsArray[resultsArray.length - 1].pos < (end - start)) {
+        resultsArray.push({typ: match, len: (end - start)  - (resultsArray[resultsArray.length -1].pos + resultsArray[resultsArray.length -1].len), pos: resultsArray[resultsArray.length -1].
+			   pos + resultsArray[resultsArray.length -1].len, array: arrayVal})
+    }
+    return resultsArray;
+}
+
+function offsetByStart(event,start, arrayVal) {
+    return ({typ: event.typ, len: event.len, pos: event.pos - start, array: arrayVal});
+}
+
+// take an HMID event string and convert to a series of events
+function hmidToEvents(eventString, arrayVal) {
+    var res = eventString.split("_");
+    var tokens = [];
+    for (i = 0; i < res.length; i++) {
+        var subEvents = res[i].split("&")
+
+        for (j = 0; j < subEvents.length; j++)
+            if (subEvents[j] != "NONE") {
+                tokens.push(eventToObject(subEvents[j],arrayVal))
+            }
+    }
+    return tokens;
+}
+
+    // convert a single event string to an object, which looks like
+
+function eventToObject(event, arrayVal) {
+    var tokens = event.split("+");
+    var typeOf = tokens[0].substring(tokens[0].length - 1, tokens[0].length)
+    if (typeOf == "I") {
+        typeOf = insertion
+    } else if (typeOf == "D") {
+        typeOf = deletion
+    } else {
+        typeOf = match
+    }
+
+    var lengthOf = Number(tokens[0].substring(0, tokens[0].length - 1))
+    var position = Number(tokens[1])
+    return {typ: typeOf, len: lengthOf, pos: position, array: arrayVal}
+}
