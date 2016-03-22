@@ -24,8 +24,8 @@ case class NormalizedEventCounter(eventF: InputTable, numberOfCells: Double) ext
     if (!(sampleEventToCount contains evt1.getSample()))
       sampleEventToCount(evt1.getSample()) = new HashMap[String,Double]()
     evt1.getEventStrings().foreach { evtString =>
-      sampleEventToCount(evt1.getSample())(evtString) = sampleEventToCount(evt1.getSample()).getOrElse(evtString,0.0) + evt1.getCount.toDouble
-      eventToCountAll(evtString) = eventToCountAll.getOrElse(evtString,0.0) + evt1.getCount.toDouble
+      sampleEventToCount(evt1.getSample())(evtString) = sampleEventToCount(evt1.getSample()).getOrElse(evtString,0.0) + evt1.getSupport.toDouble
+      eventToCountAll(evtString) = eventToCountAll.getOrElse(evtString,0.0) + evt1.getSupport.toDouble
     }
   }}
 

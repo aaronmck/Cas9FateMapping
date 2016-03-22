@@ -13,7 +13,7 @@ stats_line = ""
 for line in stats_file:
     if line.startswith(args.umi):
         stats_line = line.strip("\n").split("\t")
-
+        
 if stats_line == "":
     raise Exception('Unable to find UMI')
 
@@ -22,46 +22,40 @@ cut_file = open(args.cutsites)
 header = cut_file.readline()
 for line in cut_file:
     cut_sites.append(int(line.strip("\n").split("\t")[2]))
+    
 
-refLength = len(stats_line[stats_header.index("readFRef")])
+token = "fwdRead"
+refseq = "fwdReadRef"
+if stats_line[stats_header.index(token)] == "NA":
+    token = "mergedRead"
+    refseq = "mergedReadRef"
+    
+refLength = len(stats_line[stats_header.index(refseq)])
 
 cutString = ""
 refIndex = 0
 for i in range(0,refLength):
-    if stats_line[stats_header.index("readFRef")][i] != '-':
+    if stats_line[stats_header.index(refseq)][i] != '-':
         refIndex += 1
     if refIndex in cut_sites:
         cutString += "^"
     else:
         cutString += "_"
 
-# eventString1
-print "Site edits:"
-print "1:\t" + stats_line[stats_header.index("target1")]
-print "2:\t" + stats_line[stats_header.index("target2")]
-print "3:\t" + stats_line[stats_header.index("target3")]
-print "4:\t" + stats_line[stats_header.index("target4")]
-print "5:\t" + stats_line[stats_header.index("target5")]
-print "6:\t" + stats_line[stats_header.index("target6")]
-print "7:\t" + stats_line[stats_header.index("target7")]
-print "8:\t" + stats_line[stats_header.index("target8")]
-print "9:\t" + stats_line[stats_header.index("target9")]
-print "10:\t" + stats_line[stats_header.index("target10")]
-
 print "\nreference, read1 (or merged), and cutsites:"
-print stats_line[stats_header.index("readFRef")]
-print stats_line[stats_header.index("readF")]
+print stats_line[stats_header.index(refseq)]
+print stats_line[stats_header.index(token)]
 print cutString
 
 cutString = "only one read, see merged above"
 refIndex = 0
 
-if stats_line[stats_header.index("readRRef")] != "merged":
-    refLength = len(stats_line[stats_header.index("readRRef")])
+if stats_line[stats_header.index("revRead")] != "NA":
+    refLength = len(stats_line[stats_header.index("revReadRef")])
 
     cutString = ""
     for i in range(0,refLength):
-        if stats_line[stats_header.index("readRRef")][i] != '-':
+        if stats_line[stats_header.index("revReadRef")][i] != '-':
             refIndex += 1
         if refIndex in cut_sites:
             cutString += "^"
@@ -69,6 +63,6 @@ if stats_line[stats_header.index("readRRef")] != "merged":
             cutString += "_"
         
 print "\nreference, read2, and cutsites:"
-print stats_line[stats_header.index("readRRef")]
-print stats_line[stats_header.index("readR")]
+print stats_line[stats_header.index("revReadRef")]
+print stats_line[stats_header.index("revRead")]
 print cutString

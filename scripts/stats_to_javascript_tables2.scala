@@ -44,10 +44,33 @@ case class HMID(events: Array[Event]) {
     }}
     return eventInts
   }
+  def eventToPerBase2(startPosition: Int, endPosition: Int): Array[ETPB] = {
+    var eventPBs = Array[ETPB]()
+    events.foreach{evt => {
+      if (evt.classOf != NoneType) {
+        if (eventPBs.size == 0 && evt.position > startPosition)
+          eventPBs :+= ETPB(startPosition, evt.position, 0)
+        else if (eventPBs(eventPBs.size - 1).stop < evt.position)
+          eventPBs :+= ETPB(eventPBs(eventPBs.size - 1).stop, evt.position, 0)
+
+        if (evt.classOf == Deletion)
+          eventPBs :+= ETPB(evt.position, evt.position + evt.size, evt.classOf.toInt)
+        else
+          eventPBs :+= ETPB(evt.position, evt.position + evt.size, evt.classOf.toInt)
+      }
+    }}
+    if (eventPBs.size > 0 && eventPBs(eventPBs.size - 1).stop < endPosition) {
+      eventPBs :+= ETPB(eventPBs(eventPBs.size - 1).stop, endPosition, 0)
+    } else if (eventPBs.size == 0) {
+      eventPBs :+= ETPB(startPosition, endPosition, 0)
+    }
+    return eventPBs
+  }
 }
+case class ETPB(start: Int, stop: Int, event: Int)
 
 // -----------------------------------------------------------------------------
-// our main event class, which handles individual entries
+// our main event class, which handles individual event entries
 // -----------------------------------------------------------------------------
 case class Event(site: Int, size: Int, classOf: IndelType, bases: Option[String], position: Int) {
   def toStringRep(): String = if (classOf == NoneType) "NONE" else size + classOf.toStr() + "+" + position + (if (bases.isDefined) ("+" + bases.get) else "")
@@ -90,7 +113,7 @@ class StatsFile(inputFile: String) {
   var totalHMIDs = 0
   // process all lines in the file
   statsFile.foreach{line => {
-    if ((line contains "PASS") && !(line contains "WT") && !(line contains "UNKNOWN")) {
+    if ((line contains "PASS") && !(line contains "WT")) { // && !(line contains "UNKNOWN")) {
       val (newHMIDString,newHMID) = lineToHMID(line)
       val replacementHMID = hmidCounts.getOrElse(newHMIDString,newHMID)
       replacementHMID.count += 1
@@ -149,6 +172,7 @@ val perBaseEvents = new PrintWriter(args(2))
 val occurances    = new PrintWriter(args(1))
 val readCounts    = new PrintWriter(args(3))
 val allEventsF    = new PrintWriter(args(4))
+val perBaseEventsNew = new PrintWriter(args(6))
 
 // -----------------------------------------------------------------------------
 // first output all of the events
@@ -182,6 +206,21 @@ statsObj.sortedEvents.slice(0,100).zipWithIndex.foreach{case((hmid,hmidEvents),i
   }
 }}
 perBaseEvents.close()
+
+// -----------------------------------------------------------------------------
+// create a simple table of the events
+// -----------------------------------------------------------------------------
+
+// ETPB(start: Int, stop: Int, event: Int)
+println(startPosition + "\t" + endPosition)
+
+perBaseEventsNew.write("array\tposition\tlength\tevent\n")
+statsObj.sortedEvents.slice(0,100).zipWithIndex.foreach{case((hmid,hmidEvents),index) => {
+  hmidEvents.eventToPerBase2(startPosition, endPosition).zipWithIndex.foreach{case(etpb,subIndex) =>
+    perBaseEventsNew.write(index + "\t" + etpb.start + "\t" + etpb.stop + "\t" + etpb.event + "\n")
+  }
+}}
+perBaseEventsNew.close()
 
 // -----------------------------------------------------------------------------
 // output per-base information

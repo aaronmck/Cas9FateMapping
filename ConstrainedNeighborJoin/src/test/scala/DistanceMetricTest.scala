@@ -39,7 +39,7 @@ case class FakeEvent(name: String) extends IndexedNode {
   def getEventStrings(): Array[String] = Array[String](name)
   def getProportion(): Double = 0.5
 
-  override def getCount(): Int = 100
+  override def getSupport(): Int = 100
 
   override def getSample(): String = "SAMPLE"
   def addSupport(additionalSupportCount: Int) {} // we dont care, do nothing}

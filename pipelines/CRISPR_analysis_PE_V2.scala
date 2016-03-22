@@ -117,6 +117,9 @@ class DNAQC extends QScript {
   @Input(doc = "The path to the seqprep tool", fullName = "seqprep", shortName = "sprep", required = false)
   var seqPrepPath: File = "/net/gs/vol1/home/aaronmck/tools/bin/SeqPrep"
 
+  @Input(doc = "The path to the flash tool", fullName = "flash", shortName = "flash", required = false)
+  var flashPath: File = "/net/gs/vol1/home/aaronmck/tools/bin/flash"
+
   @Input(doc = "the script to analyze the edits made to a crispr target", fullName = "edits", shortName = "edits", required = false)
   var crisprPath: File = "/net/gs/vol1/home/aaronmck/source/sandbox/aaron/projects/CRISPR/analyze_diversity_of_edits.scala"
 
@@ -204,6 +207,12 @@ class DNAQC extends QScript {
   @Argument(doc = "post stats umi plot script -- so we know if our cutoffs were ok", fullName = "umiPlots", shortName = "umiPlots", required = false)
   var toUMIPlotScript = "/net/shendure/vol10/projects/CRISPR.lineage/nobackup/codebase/scripts/post_stats_umi_plot.R"
 
+  @Argument(doc = "the first adapter sequence", fullName = "adaptOne", shortName = "adaptOne", required = false)
+  var adapterOne = "GACCTCGAGACAAATGGCAG"
+
+  @Argument(doc = "the second adapter sequence", fullName = "adaptTwo", shortName = "adaptTwo", required = false)
+  var adapterTwo = "CGAAGCTTGAGCTCGAGATCTG"
+
   /** **************************************************************************
     * Global Variables
     * ************************************************************************** */
@@ -262,7 +271,7 @@ class DNAQC extends QScript {
       val samUnmergedFasta = new File(sampleOutput + File.separator + sampleTag + ".UM.fasta")
       val samMergedFasta = new File(sampleOutput + File.separator + sampleTag + ".M.fasta")
 
-      var mergedReads = new File(sampleOutput + File.separator + sampleTag + ".merged.fq.gz")
+      var mergedReads = new File(sampleOutput + File.separator + "out.extendedFrags.fastq")
       var mergedReadUnzipped = new File(sampleOutput + File.separator + sampleTag + ".merged.fq")
       var unmergedUnzipped = new File(sampleOutput + File.separator + sampleTag + ".unmerged.fq")
 
@@ -283,8 +292,8 @@ class DNAQC extends QScript {
       }
 
       val cleanedFastqs = List[File](
-        new File(sampleOutput + File.separator + sampleTag + ".cleaned.trim.fastq1.fq.gz"),
-        new File(sampleOutput + File.separator + sampleTag + ".cleaned.trim.fastq2.fq.gz"))
+        new File(sampleOutput + File.separator + "out.notCombined_1.fastq"),
+        new File(sampleOutput + File.separator + "out.notCombined_2.fastq"))
 
       // run an Fastqc so we know what we started with
       // ************************************************************************************
@@ -336,13 +345,14 @@ class DNAQC extends QScript {
         cleanedTmp = List[File](toAlignFastq1,toAlignFastq2)
       }
 
-      add(SeqPrep(cleanedTmp, cleanedFastqs, mergedReads))
+      //add(SeqPrep(cleanedTmp, cleanedFastqs, mergedReads, adapterOne, adapterTwo))out.extendedFrags.
+      add(Flash(cleanedTmp, cleanedFastqs, mergedReads, sampleOutput + File.separator))
 
       add(ZipReadFiles(cleanedFastqs(0), cleanedFastqs(1), unmergedUnzipped))
-      add(Gunzip(mergedReads, mergedReadUnzipped))
+      //add(Gunzip(mergedReads, mergedReadUnzipped))
 
       add(NeedlemanAllFasta(sampleObj.reference, unmergedUnzipped, samUnmergedFasta, false))
-      add(NeedlemanAllFasta(sampleObj.reference, mergedReadUnzipped, samMergedFasta, false))
+      add(NeedlemanAllFasta(sampleObj.reference, mergedReads, samMergedFasta, false)) // mergedReadUnzipped
 
       add(ReadsToStats(samUnmergedFasta,
         samMergedFasta,
@@ -376,7 +386,7 @@ class DNAQC extends QScript {
       val mergedUMIInfo = new File(aggregateLocation + File.separator + "merged.umi.info")
       add(AggregateStatsFiles(umiStatsFiles, mergedStatsFile, mergedUMIInfo, true))
 
-      add(AggregateReport(mergedStatsFile,aggReportDir))
+      // add(AggregateReport(mergedStatsFile,aggReportDir))
 
       val treeFile = new File(aggregateLocation + File.separator + "merged.tree")
       val annotationFile = new File(aggregateLocation + File.separator + "merged.annotations")
@@ -396,7 +406,7 @@ class DNAQC extends QScript {
       val mergedNonUMIInfo = new File(aggregateLocation + File.separator + "merged.nonumi.info")
       add(AggregateStatsFiles(nonUmiStatsFiles, mergedNonUMIStatsFile, mergedNonUMIInfo, false))
 
-      add(AggregateReport(mergedNonUMIStatsFile,aggReportDir))
+      //add(AggregateReport(mergedNonUMIStatsFile,aggReportDir))
     }
   }
 
@@ -1027,40 +1037,7 @@ class DNAQC extends QScript {
   }
 
   /**
-   * seqprep -- trimmomatic's main competition, does read merging as well
-   *
-   * trims off adapter sequence and low quality regions in paired end sequencing data, merges on reqest
-   */
-  // ********************************************************************************************************
-  case class SeqPrepNoMerge(inFastqs: List[File], outs: List[File]) extends CommandLineFunction with ExternalCommonArgs {
-
-    @Input(doc = "input FASTAs") var fqs = inFastqs
-    @Output(doc = "output fastas (corrected)") var fqOuts = outs
-
-    if (inFastqs.length != 2 || outs.length != 2)
-      throw new IllegalArgumentException("SeqPrepNoMerge can only be run on paired end sequencing! for input files " + inFastqs.mkString(", "))
-
-    this.memoryLimit = 4
-    this.residentRequest = 4
-    this.residentLimit = 4
-
-    // o -> minimum overlap, n -> faction of bases that must match in overlap
-    var cmd = seqPrepPath + " -f " + fqs(0) + " -r " + fqs(1) + " -1 " + fqOuts(0) + " -2 " + fqOuts(1)
-
-    def commandLine = cmd
-    this.isIntermediate = false
-    this.analysisName = queueLogDir + fqs(0) + ".SeqPrepNoMerge"
-    this.jobName = queueLogDir + fqs(0) + ".SeqPrepNoMerge"
-  }
-
-  /**
    * Process the UMIs, merging and aligning reads down to a single, high-quality concensus per UMI
-   * val inputFileReads = args(0)
-   * val outputFile = new PrintWriter(args(1))
-   * val outputStats = new PrintWriter(args(2))
-   * val umiCutoff = args(3).toInt
-   * val primersEachEnd = args(4)
-   * val reference = args(5)
    */
   // ********************************************************************************************************
   case class UMIProcessingPaired(inMergedReads1: File, inMergedReads2: File, outputFASTA1: File, outputFASTA2: File,
@@ -1076,7 +1053,7 @@ class DNAQC extends QScript {
 
     var cmdString = "scala -J-Xmx13g /net/shendure/vol10/projects/CRISPR.lineage/nobackup/bin/UMIMerge.jar "
     cmdString += " --inputFileReads1 " + inReads1 + " --inputFileReads2 " + inReads2 + " --outputFastq1 " + outFASTA1 + " --outputFastq2 " + outFASTA2 
-    cmdString += " --umiLength " + umiCut + " --primersEachEnd " + primers + " --samplename " + sample + " --umiStart 0 --minimumUMIReads " + 10
+    cmdString += " --umiLength " + umiCut + " --primersEachEnd " + primers + " --samplename " + sample + " --umiStart 0 --minimumUMIReads " + minUMIs
 
     var cmd = cmdString
 
@@ -1122,13 +1099,14 @@ class DNAQC extends QScript {
     this.analysisName = queueLogDir + outStat + ".calls"
     this.jobName = queueLogDir + outStat + ".calls"
   }
+
   /**
    * seqprep -- trimmomatic's main competition, does read merging as well
    *
    * trims off adapter sequence and low quality regions in paired end sequencing data, merges on reqest
    */
   // ********************************************************************************************************
-  case class SeqPrep(inFastqs: List[File], outs: List[File], outputMerged: File ) extends CommandLineFunction with ExternalCommonArgs {
+  case class SeqPrep(inFastqs: List[File], outs: List[File], outputMerged: File, adapterOne: String, adapterTwo: String) extends CommandLineFunction with ExternalCommonArgs {
 
     @Input(doc = "input FASTAs") var fqs = inFastqs
     @Output(doc = "output fastas (corrected)") var fqOuts = outs
@@ -1142,11 +1120,39 @@ class DNAQC extends QScript {
     this.residentLimit = 4
 
     // o -> minimum overlap, n -> faction of bases that must match in overlap
-    var cmd = seqPrepPath + " -f " + fqs(0) + " -r " + fqs(1) + " -1 " + fqOuts(0) + " -2 " + fqOuts(1) + " -s " + merged
+    var cmd = seqPrepPath + " -f " + fqs(0) + " -r " + fqs(1) + " -1 " + fqOuts(0) + " -2 " + fqOuts(1) + " -s " + merged + " -A " + adapterOne + " -B " + adapterTwo
 
     def commandLine = cmd
     this.isIntermediate = false
       this.analysisName = queueLogDir + fqs(0) + ".seqprep"
     this.jobName = queueLogDir + fqs(0) + ".seqprep"
+  }
+
+  /**
+   * flash -- seems to do a much better job with read overlap assembly than SeqPrep or Trimmomatic
+   * this is one of those tools where you can't specify the output file only the directory, so our 
+   * output file names have to be correctly formatted for what flash will output
+   */
+  // ********************************************************************************************************
+  case class Flash(inFastqs: List[File], outs: List[File], outputMerged: File, outputDir: File) extends CommandLineFunction with ExternalCommonArgs {
+
+    @Input(doc = "input FASTAs") var fqs = inFastqs
+    @Output(doc = "output unmerged files") var fqOuts = outs
+    @Output(doc = "output merged reads") var merged = outputMerged
+    @Argument(doc = "the output directory") var outputDr = outputDir
+
+    if (inFastqs.length != 2 || outs.length != 2)
+      throw new IllegalArgumentException("Seqprep can only be run on paired end sequencing! for input files " + inFastqs.mkString(", "))
+
+    this.memoryLimit = 4
+    this.residentRequest = 4
+    this.residentLimit = 4
+
+    var cmd = flashPath + " --min-overlap 30 --max-mismatch-density 0.02 --output-directory=" + outputDr + " " + fqs(0) + " " + fqs(1) 
+
+    def commandLine = cmd
+    this.isIntermediate = false
+      this.analysisName = queueLogDir + fqs(0) + ".flash"
+    this.jobName = queueLogDir + fqs(0) + ".flash"
   }
 }

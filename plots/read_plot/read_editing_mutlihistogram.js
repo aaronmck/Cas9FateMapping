@@ -309,7 +309,7 @@ function changeHistogram() {
 // ************************************************************************************************************
 function redrawHistogram() {
 
-    var local_occur_data = occurance_data.filter(function(d){ return +d.array <= topHMIDs; })
+    var local_occur_data = occurance_data.filter(function(d){ return +d.array < topHMIDs; })
 
     
     // find the maximum number of reads

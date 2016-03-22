@@ -408,7 +408,7 @@ class DistanceMatrix(events: Array[IndexedNode], distanceCalculator: DistanceMet
     stats.getUniqueEvents().foreach(ft => {
       val sampleTotal = stats.getSampleCount()(ft.getSample()).toDouble
       output.write(ft.getID() + "\t" + ft.getSample() + "\t" +
-        ft.getCount() + "\t" + ft.getEventStrings().mkString("-") + "\t" + (ft.getCount().toDouble /sampleTotal) + "\n")
+        ft.getSupport() + "\t" + ft.getEventStrings().mkString("-") + "\t" + (ft.getSupport().toDouble /sampleTotal) + "\n")
     })
 
     output.close()

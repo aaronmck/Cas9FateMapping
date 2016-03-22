@@ -9,7 +9,6 @@ import java.io._
 import scala.collection.mutable._
 import scala.sys.process._
 import java.util.zip._
-
 import scala.util.Random
 
 /**
@@ -39,9 +38,10 @@ import scala.util.Random
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
  *
  */
-case class Config(inputTree: File = new File(Main.NOTAREALFILENAME),
+case class TreeConfig(inputTree: File = new File(Main.NOTAREALFILENAME),
                   outputSubTrees: File = new File(Main.NOTAREALFILENAME),
                   mappingFile: File = new File(Main.NOTAREALFILENAME))
+
 
 
 object Main extends App {
@@ -50,7 +50,7 @@ object Main extends App {
   val NOTAREALFILE = new File(NOTAREALFILENAME)
 
   // parse the command line arguments
-  val parser = new scopt.OptionParser[Config]("UMIMerge") {
+  val parser = new scopt.OptionParser[TreeConfig]("UMIMerge") {
     head("TreeUtils", "1.0")
 
     // *********************************** Inputs *******************************************************
@@ -65,8 +65,8 @@ object Main extends App {
   }
 
   // *********************************** Run *******************************************************
-  parser.parse(args, Config()) map {
-    config: Config => {
+  parser.parse(args, TreeConfig()) map {
+    config: TreeConfig => {
 
       // load up the annotation manager
       println("Loading annotation manager from your annotation file...")
@@ -94,7 +94,8 @@ object Main extends App {
 
   /**
    * manages our annotations.  Put this all in one place so we can make a scrambled version of it later
-   * @param mappingFileName the input file
+    *
+    * @param mappingFileName the input file
    */
   case class AnnotationManager(mappingFileName: String) {
 
@@ -132,7 +133,8 @@ object Main extends App {
 
   /**
    * find the average distance you have to travel when going from the root node to any leaf
-   * @param rootNode the root node to consider
+    *
+    * @param rootNode the root node to consider
    */
   def getAverageLeafDistanceToRoot(rootNode: Node): Unit = {
     var heights = ArrayBuilder.make[Double]
@@ -192,9 +194,11 @@ object Main extends App {
     outputFile.close()
   }
 
+
   /**
    * find the purity of the subtree
-   * @param root the root node
+    *
+    * @param root the root node
    * @param propCutoff the cutoff we need to call a subtree pure
    * @param minNodes the minimum number of nodes to report for a pure subtree
    * @param annotManager the annotations
@@ -230,7 +234,8 @@ object Main extends App {
   /**
    * given a subtree, figure out how 'pure' it is -- how many of the nodes underneath
    * have the same label in our nodeNameToGroup tabl
-   * @param node the node to traverse over
+    *
+    * @param node the node to traverse over
    * @param propCutoff the proportion of leaves that need to be the same label
    * @param minNodes the min number of nodes required to find a valid subtree
    * @param annotManager all of our annotations for this tree
@@ -286,7 +291,8 @@ object Main extends App {
 
   /**
    * split out a subtree as a set depth
-   * @param rootNode the node to start at
+    *
+    * @param rootNode the node to start at
    * @param outputNewick the output file to write to
    * @param divisions how many cell divisions should we split at?
    */
@@ -309,7 +315,8 @@ object Main extends App {
 
   /**
    * find all the set trees as a specific height
-   * @param rootNode the node to start from
+    *
+    * @param rootNode the node to start from
    * @param outputNewick the output file
    * @param height the height to cut at
    */
@@ -339,7 +346,8 @@ object Main extends App {
   /**
    * permute a tree's labels at the leaves.  I do this by iterating through each leaf, picking another random
    * leaf among all leaves, and swapping labels
-   * @param root the root node
+    *
+    * @param root the root node
    * @return the same root node, with leaves transformed
    */
   def permuteTreeLabels(root: Node): Node = {

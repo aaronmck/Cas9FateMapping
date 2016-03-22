@@ -20,7 +20,7 @@ case class Event(name: String, sample: String, supportCount: Int, eventStrings: 
 
   def setID(idVal: Int) = {id = idVal}
   def getID() = id
-  def getCount() = support_count
+  def getSupport() = support_count
   def getSample() = sample
   def addSupport(additionalCount: Int) { support_count += additionalCount}
   def countNonWT(): Int = eventStrings.filter{evt => evt.contains("\\+")}.size
@@ -152,14 +152,14 @@ object Event {
    * @return true if they're compatible, false if not
    */
   def compatible(event1: Event, event2: Event): Boolean = {
-
+    return true /*
     // now check our compatibility
     var sm = 0
     sm += Event.scoreInternal(event1, event2)
     sm += Event.scoreInternal(event2, event1)
 
     // our compatible condition and do the reverse in case event2 has merged nodes
-    sm == 0
+    sm == 0*/
   }
 
 }

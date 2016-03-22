@@ -9,7 +9,7 @@ import scala.io.Source
 /**
  * load a stats file into a series of events
  */
-case class StatsFile(inputFile: File, targetSiteCount: Int = 10) extends InputTable {
+case class StatsFile(inputFile: File, targetSiteCount: Int = 10, filterByOccurance: Int = 10) extends InputTable {
 
   // read in the series of events
   var uniqueEventsMapping = new HashMap[String, IndexedNode]()
@@ -29,7 +29,8 @@ case class StatsFile(inputFile: File, targetSiteCount: Int = 10) extends InputTa
   var eventColumns = header.filter{case(token,index) => token.startsWith("target")}.map{case(tk,index) => index}.toArray
 
   var nodeIndex = 0
-
+  var droppedLine = 0
+  
   // now make the event string from the target columns for each remaining line
   inputLines.foreach{line => {
 
@@ -55,11 +56,14 @@ case class StatsFile(inputFile: File, targetSiteCount: Int = 10) extends InputTa
       } else {
         uniqueEventsMapping(keyString).addSupport(1)
       }
+    } else {
+      droppedLine += 1
     }
   }}
 
-  val uniqueEvents = uniqueEventsMapping.values.toArray
-  println("unique event size " + uniqueEvents)
+  println("Dropped " + droppedLine + " lines")
+  val uniqueEvents = uniqueEventsMapping.values.filter{event => event.getSupport > filterByOccurance}.toArray
+  println("unique event size " + uniqueEvents.size)
   val uniqueEventsMappingStrings = uniqueEventsMapping.map{case(samplePlusEvent,event) => (samplePlusEvent,event.getEventStrings().mkString(""))}
 
   println("Processed " + allEvents.size + " events")

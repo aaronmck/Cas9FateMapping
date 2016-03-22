@@ -88,7 +88,9 @@ object Main extends App {
       // setup a distance matrix
       // ------------------------------------------------------------------------------------------------------------------------
       //val distMetric = SumLogDistance(eventCounter, config.noneDistance, config.equalScore, 2)
-      val distMetric = SimpleAdditiveDistance(eventCounter)
+      //val distMetric = SimpleAdditiveDistance(eventCounter)
+      val distMetric = Hamming(eventCounter)
+
       //val distMetric = Hamming(eventCounter)
       //val distMetric = SumLogDistance(eventCounter, config.noneDistance, config.equalScore, 2)
       val distances = new DistanceMatrix(statsFile.getUniqueEvents(), distMetric)

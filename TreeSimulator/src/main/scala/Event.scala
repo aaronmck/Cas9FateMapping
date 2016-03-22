@@ -41,9 +41,6 @@ case class Event(name: String, sample: String, numberOfReads: Int, eventStrings:
   }
 }
 
-//val evt1 = Event("test1","test1",1,Array[String]("4D-37","79D-65","79D-65","79D-65","79D-65","NONE","NONE","NONE","NONE","NONE"))
-//val evt2 = Event("test2","test2",1,Array[String]("41D-20","NONE","NONE","NONE","NONE","NONE","NONE","NONE","NONE","NONE"))
-
 object Event {
   val NONE = "NONE"
 

@@ -13,6 +13,7 @@ val header = lines.next()
 val output = new PrintWriter(args(1))
 val mixCommandFile = new PrintWriter(args(2))
 val annotationFile = new PrintWriter(args(3))
+val weightFile = new PrintWriter(args(4))
 
 
 
@@ -46,6 +47,8 @@ var nextIndex = 1
 
 // store a mapping from the column to a list of event numbers
 val columnToEventsArray = new HashMap[Int,ArrayBuilder[Int]]()
+
+
 targetToIndex.foreach{case(target,column) => columnToEventsArray(target) = ArrayBuilder.make[Int]}
 
 var linesProcessed = 0
@@ -61,11 +64,12 @@ lines.foreach{line => {
     targetToIndex.foreach{case(target,index) => {
       val event = sp(index)
 
-      if (event != "UNKNOWN") { // event != "NONE" &&
+      if (event != "UNKNOWN" && event != "NONE") { 
         if (!(eventToNumber contains event)) {
           eventToNumber(event) = nextIndex
           numberToEvent(nextIndex) = event
           nextIndex += 1
+          //eventToCount(event) = eventToCount.getOrElse(event,0) + 1
         }
         eventToCount(event) = eventToCount.getOrElse(event,0) + 1
         columnToEventsArray(target) = columnToEventsArray.getOrElse(target,ArrayBuilder.make[Int]) += eventToNumber(event)
@@ -81,8 +85,33 @@ val lines2 = Source.fromFile(args(0)).getLines()
 val header2 = lines2.next()
 var index = 1
 
-output.write(linesProcessed + "\t" + (nextIndex - 3) + "\n")
-annotationFile.write("taxa\teventString\tnumberStringg\n")
+//output.write(linesProcessed + "\t" + (nextIndex - 3) + "\n")
+annotationFile.write("taxa\teventString\tnumberString\tsamples\n")
+
+val keyToTag = new HashMap[String,String]()
+val keyToCount = new HashMap[String,Int]()
+
+
+// scale the values from counts to characters (0-9, A-Z)
+val characterArray = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+// normalize the weights to the range of values we have
+val maxCount = eventToCount.values.max
+
+println(characterArray.length)
+def scaleValues(value: Int, min: Int, max: Int): Char = {
+  val maxLog = math.log(max)
+  val valueLog = math.log(value)
+  println(maxLog + " " + valueLog + " ")
+  val ret = scala.math.round(((valueLog.toDouble - min.toDouble) / maxLog.toDouble) * (characterArray.length.toDouble -1.0)).toInt
+  characterArray(ret)
+}
+val weights = (1 until nextIndex).map{
+  case(index) => {
+    scaleValues(eventToCount(numberToEvent(index)),0,maxCount)
+  }
+}.toArray
+
 
 lines2.foreach{line => {
   if ((line contains "PASS") && !((line contains "UNKNOWN") || (line contains "WT"))) {
@@ -90,8 +119,11 @@ lines2.foreach{line => {
     val builder = new StringBuilder()
     val name = ("N" + index)
     index += 1
+
+    // make a padded version of the name
     builder ++= name + (0 until (10 - name.length)).map{i => " "}.mkString("")
 
+    // now assign a target ID to each appropriate column
     val tags = new HashMap[Int,Boolean]()
     var eventString = Array[String]()
     var numberString = Array[String]()
@@ -101,12 +133,28 @@ lines2.foreach{line => {
       numberString :+= eventToNumber(sp(index)).toString.reverse.padTo(5,' ').reverse
     }}
 
-    annotationFile.write(name + "\t" + eventString.mkString("-") + "\t" + numberString.mkString("-") + "\n")
+    annotationFile.write(name + "\t" + eventString.mkString("-") + "\t" + numberString.mkString("-") + "\t" + sp(0) + "\n")
 
-    (1 until nextIndex).foreach{index => builder ++= {if (tags contains index) "1" else "0"}}
+    val readbuilder = new StringBuilder()
+      (1 until nextIndex).foreach{index => {
+        readbuilder ++= {if (tags contains index) "1" else "0"}
+      }}
 
-    output.write(builder.result + "\n")
+    keyToTag(readbuilder.result) = builder.result
+    keyToCount(readbuilder.result) = keyToCount.getOrElse(readbuilder.result,0) + 1
   }
 
 }}
+
+output.write((keyToTag.size + 1) + "\t" + (nextIndex - 3) + "\n")
+output.write("root      ")
+  (1 until nextIndex).foreach{index => {output.write("0")}}
+output.write("\n")
+
+
+keyToTag.foreach{case(edits,name) => output.write(name + edits + "\n")}
 output.close()
+
+//weightFile.write(keyToTag.size + "\t" + (nextIndex - 3) + "\n")
+weightFile.write(weights.mkString("") + "\n")
+weightFile.close()

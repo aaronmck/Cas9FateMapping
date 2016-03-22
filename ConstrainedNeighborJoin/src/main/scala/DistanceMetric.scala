@@ -63,7 +63,7 @@ case class AvgLogDistance(mutationToCount: EventCounter, noneScore: Double, equa
 /**
  * find the raw proportion-based distance of two events
  */
-case class Hamming(mutationToCount: EventCounter, noneScore: Double) extends DistanceMetric[IndexedNode] {
+case class Hamming(mutationToCount: EventCounter) extends DistanceMetric[IndexedNode] {
 
   def distance(event1: IndexedNode, event2: IndexedNode): Double = {
     event1.getEventStrings.zip(event2.getEventStrings).map { case (evt1, evt2) => {

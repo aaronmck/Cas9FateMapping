@@ -1,6 +1,7 @@
 import java.io.{File,FileInputStream,FileOutputStream}
 import scala.sys.process._
 import java.io._
+import scala.io._
 
 // "scala -J-Xmx1g " + toWebPublishScript + " " + webLocation + " " + perBase + " " + topR + " " + topReadC + " " + allReadC
 
@@ -51,10 +52,31 @@ if (!copyToDir(javaScriptFile,webLocation))     throw new IllegalArgumentExcepti
 if (!copyToDir(cutSiteFile,webLocation))        throw new IllegalArgumentException("unable to copy " + cutSiteFile + " to " + webLocation)
 if (!copyToDir(allReadFile,webLocation))        throw new IllegalArgumentException("unable to copy " + allReadFile + " to " + webLocation)
 
+// load the cutsites up, and find the start and stop positions for javascript output
+val upAndDownstream = 20
+var startPos = 1000000000
+var endPos = -1
+
+val cutSiteLines = Source.fromFile(cutSiteFile).getLines()
+val cutHeader = cutSiteLines.next()
+cutSiteLines.foreach{line => {
+  val sp = line.split("\t")
+  val start = sp(1).toInt
+  val cutPos = sp(2).toInt
+
+  if ((start - 20) < startPos)
+    startPos = start - 20
+  if ((cutPos + 20) > endPos)
+    endPos = cutPos + 20
+}}
+
+
 // now in the web directory make a little javascript file that tells the main JS which files to use
 val fileList = new PrintWriter(webLocation + File.separator + "JS_files.js")
 fileList.write("var occurance_file = \"" + topReadCountsFile.getName() + "\"\n")
 fileList.write("var top_read_melted_to_base = \"" + topReadsFile.getName() + "\"\n")
 fileList.write("var per_base_histogram_data = \"" + perbaseFile.getName() + "\"\n")
 fileList.write("var cut_site_file = \"" + cutSiteFile.getName() + "\"\n")
+fileList.write("var startPos = " + startPos + "\n")
+fileList.write("var endPos = " + endPos + "\n")
 fileList.close()

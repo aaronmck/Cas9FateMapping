@@ -58,13 +58,15 @@ class CutSites:
 # ------------------------------------------------------------------------------------------
 class EventArray:
     def __init__(self,cigar):
-        events = [Event(cg) for cg in cigar.split('&')]
+        self.events = [Event(cg) for cg in cigar.split('&')]
         
 class Event:
     def __init__(self, cigar):
+        self.cigar = cigar
         tokens = cigar.split('+')
-        self.isNone = len(tokens) > 0
-
+        self.isNone = len(tokens) < 2
+        print cigar + "\t" + str(len(tokens)) + "\t" + str(self.isNone)
+        
         if not self.isNone:
             self.size = int(tokens[0][0:len(tokens[0]) - 1])
             self.indel = tokens[0][len(tokens[0]) - 1:len(tokens[0])]
@@ -84,19 +86,26 @@ class Event:
 # ------------------------------------------------------------------------------------------
 class HMIDContainer:
     def __init__(self, cigars, reference_length, offset):
-        self.cigars = cigars
+        
+        self.cigars = {}
+        for eventArray in cigars:
+            for event in eventArray.events:
+                self.cigars[event.cigar] = event
+                
         self.ref_length = reference_length
         
         self.events = [0] * reference_length
         self.lengths = [0] * reference_length
         
-        for event in self.cigars:
+        for eventRaw,event in self.cigars.iteritems():
             if not event.isNone:
-                for x in range(event.position,event.size):
+                for x in range(event.position,event.position + event.size):
                     event_type = deletion if event.indel == 'D' else insertion
                     event_size = event.size
                     self.events[x - offset] = event_type
-                    self.length[x - offset] = event_size
+                    self.lengths[x - offset] = event_size
+
+        print ",".join([str(x) for x in self.events])
                 
     def output_array_representation(self, array_index, output):
         for i in range(0, self.ref_length):
@@ -142,15 +151,17 @@ class HMIDs:
         matches = [0] * reference_len
         
         for hmid, count in self.hmid_to_count.iteritems():
-            event_container = HMIDContainer([Event(x) for x in hmid[0].split("_")],reference_len,start_pos)
-            for index,x in enumerate(event_container.events):
-                if x == deletion:
-                    deletions[index] += 1
-                elif x == insertion:
-                    insertions[index] += 1
+            event_container = HMIDContainer([EventArray(x) for x in hmid.split("_")],reference_len,start_pos)
+                            
+            for x in range(0,len(event_container.events)):
+                if event_container.events[x] == deletion:
+                    deletions[x] += 1
+                elif event_container.events[x] == insertion:
+                    insertions[x] += 1
                 else:
-                    matches[index] += 1
+                    matches[x] += 1
 
+        print "insertions" + ",".join([str(x) for x in insertions])
         for x in range(0,reference_len):
             output_file.write(str(x) + "\t" + str(matches[x]) + "\t" + str(insertions[x]) + "\t" + str(deletions[x]) + "\n")
         
@@ -202,7 +213,7 @@ def main():
     for index, hmid in enumerate(top_events):
         is_wild_type = "1" if hmid[0] == wild_type else "2"
         
-        event_container = HMIDContainer([Event(x) for x in hmid[0].split("_")],ref_len, start_pos)
+        event_container = HMIDContainer([EventArray(x) for x in hmid[0].split("_")],ref_len, start_pos)
         event_container.output_array_representation(index, output_blown_out_reads)
         output_top_read_count.write(hmid[0] + "\t" + str(index) + "\t" + str(float(hmid[1])/float(len(hmids.hmid_to_count))) + "\t" + str(hmid[1]) + "\t" + is_wild_type + "\n")
 
