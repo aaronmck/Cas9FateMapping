@@ -6,7 +6,7 @@
   * bash/shell profile
   *
   *
-  * Copyright (c) 2014, aaronmck
+  * Copyright (c) 2014, 2015, 2016, aaronmck
   * All rights reserved.
   *
   * Redistribution and use in source and binary forms, with or without
@@ -55,9 +55,11 @@ import java.io.File
   * Given amplicon reads from a CRISPR experiment, align and call events over those cut sites.
   *
   * PLEASE READ:
+  * 
   * - This pipeline assumes your reference file, say myref.fa, has the following additional files in the same dir:
   * - myref.fa.cutSites <-- contains the CRISPR target seq, position start, the cutsite position
   * - myref.fa.primers <-- two lines, containing the positive strand primers on both ends of your amplicon. 
+  * 
  **/
 class DNAQC extends QScript {
   qscript =>
@@ -156,7 +158,7 @@ class DNAQC extends QScript {
   val queueLogDir: String = ".qlog/"
 
   // ** **************************************************************************
-  // * Main script
+  // * Main script entry point
   // * **************************************************************************
   def script() {
     var umiStatsFiles = List[File]()
@@ -169,7 +171,7 @@ class DNAQC extends QScript {
     // read in the tear sheet and process each sample
     parseTearSheet(input).foreach(sampleObj => {
 
-      // the sample name we'll use for files -- the sample name plus the library name
+      // the sample name we'll use for generating files
       val sampleTag = sampleObj.sample
 
       // check that our basic output dir can be made
@@ -195,9 +197,7 @@ class DNAQC extends QScript {
       val initialFastQCDir =   dirOrCreateOrFail(new File(sampleOutput + File.separator + "initial_fastQC"), "initial fastqc directory")
       val initialFastQMerged = dirOrCreateOrFail(new File(sampleOutput + File.separator + "initial_fastQC_Merged"), "initial fastqc directory")
       val postCleanFastQCDir = dirOrCreateOrFail(new File(sampleOutput + File.separator + "post_clean_fastQC"), "final fastqc directory")
-      val webTreeLocation =    dirOrCreateOrFail(new File(webLocation +  File.separator + experimentalName + File.separator + sampleTag + File.separator + "tree"), "our output tree directory")
       val sampleWebLocation =  dirOrCreateOrFail(new File(webLocation +  File.separator + experimentalName + File.separator + sampleTag), "our output web publishing directory")
-      val plotsDir =           dirOrCreateOrFail(new File(webLocation +  File.separator + experimentalName + File.separator + sampleTag + File.separator + "umiPlots"), "our output plot directory")
 
       // our barcode split files
       var barcodeSplit1 = new File(sampleOutput + File.separator + sampleTag + ".barcodeSplit.fastq1.fq.gz")
@@ -209,9 +209,6 @@ class DNAQC extends QScript {
       var mergedReads = new File(sampleOutput + File.separator + "out.extendedFrags.fastq")
       var mergedReadUnzipped = new File(sampleOutput + File.separator + sampleTag + ".merged.fq")
       var unmergedUnzipped = new File(sampleOutput + File.separator + sampleTag + ".unmerged.fq")
-
-      val mergedUMIStripped = new File(sampleOutput + File.separator + sampleTag + ".merged.stripedUMI.fq.gz")
-      val mergedUMIStrippedStats = new File(webLoc + "/UMI_stats.txt")
 
       // ************************************** split the input files by barcodes, either one or two **************************************
       var barcodeFiles = if (dualBarcode) List[File](sampleObj.fastqBarcode1,sampleObj.fastqBarcode2) else List[File](sampleObj.fastqBarcode1)
@@ -238,16 +235,12 @@ class DNAQC extends QScript {
       val toAlignFastq2 = new File(sampleOutput + File.separator + sampleTag + ".rev.fastq")
       val toAlignStats = new File(sampleOutput + File.separator + sampleTag + ".stats")
       
-      val toAlignUMIStats = new File(sampleOutput + File.separator + sampleTag + ".umi.stats")
-
       val perBaseEventFile = new File(sampleOutput + File.separator + sampleTag + ".perBase")
       val topReadFile = new File(sampleOutput + File.separator + sampleTag + ".topReadEvents")
       val topReadFileNew = new File(sampleOutput + File.separator + sampleTag + ".topReadEventsNew")
       val topReadCount = new File(sampleOutput + File.separator + sampleTag + ".topReadCounts")
       val allReadCount = new File(sampleOutput + File.separator + sampleTag + ".allReadCounts")
       val cutSites = new File(sampleObj.reference + ".cutSites")
-
-      // clean up the reads as much as possible
       val unpairedReads = List[File](new File(sampleOutput + File.separator + sampleTag + ".unpaired1.fq.gz"),new File(sampleOutput + File.separator + sampleTag + ".unpaired2.fq.gz"))
 
       // *******************************************************************************************
@@ -325,17 +318,6 @@ class DNAQC extends QScript {
     dir
   }
 
-  // function to check if the bwa process is likely to fail (BWA doesn't always return a non-zero exit code)
-  // so try to cut down on the mistakes by verifying a few things before we begin.  Either return the BWA parameters
-  // or crap out with an exception if things are setup incorrectly
-  def verifyBWAParameters(bwaSetup: BWAAlignPairedEndWithMEM): BWAAlignPairedEndWithMEM = {
-    if (!(new File(bwaSetup.reference + ".sa")).exists)
-      throw new IllegalStateException("Unable to find the .sa file for the reference, index your reference using BWA!")
-    if (!(new File(bwaSetup.reference + ".bwt")).exists)
-      throw new IllegalStateException("Unable to find the .bwt file for the reference, index your reference using BWA!")
-    bwaSetup
-  }
-
   // The storage container for the data we've read from the input tear sheet
   case class SourceEntry(
     val sample: String,
@@ -407,10 +389,6 @@ class DNAQC extends QScript {
     this.residentRequest = 6
     this.residentLimit = 6
     this.isIntermediate = false // by default delete the intermediate files, if you want to keep output from a task set this to false in the case class
-  }
-
-  trait SAMargs extends PicardBamFunction with ExternalCommonArgs {
-    this.maxRecordsInRam = 100000
   }
 
   /** **************************************************************************

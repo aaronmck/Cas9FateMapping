@@ -1,13 +1,17 @@
 // event_histogram_r50high.txt
-var width = 600
+var width = 300
 var height = 200
 var bin_size = 5
 var margin_left = 100
 var margin_top = 100
 var buffer = 5000
 
-var reds = ["#190000","#4c0000","#7f0000","#b20000","#e50000","#ff0000","#ff3232","#ff6666","#ff9999","#ffcccc"].reverse()
-var blues = ["#000019","#00004c","#00007f","#0000b2","#0000e5","#0000ff","#3232ff","#6666ff","#9999ff","#ccccff"].reverse()
+// old colors:
+// var reds = ["#190000","#4c0000","#7f0000","#b20000","#e50000","#ff0000","#ff3232","#ff6666","#ff9999","#ffcccc"].reverse()
+// var blues = ["#000019","#00004c","#00007f","#0000b2","#0000e5","#0000ff","#3232ff","#6666ff","#9999ff","#ccccff"].reverse()
+
+var reds = ["#7f0000","#e50000","#ff0000","#ff3232","#ff9999"].reverse()
+var blues = ["#6666ff"]
 var colors = d3.scale.ordinal().range(reds.concat(blues))
 
 d3.tsv(event_file, function (error, data) {
@@ -86,10 +90,16 @@ d3.tsv(event_file, function (error, data) {
 	    return y(d.stackHeight)
 	})
 	.style("fill", function(d) {
-	    if (d.type == "I")
+	    if (d.type == "I") {
 		return blues[+d.event_count-1];
-	    if (d.type == "D")
-		return reds[+d.event_count-1];
+	    }
+	    if (d.type == "D") {
+		// limit the number of deletions to 5 (0 to 4 inclusive)
+		if ((+d.event_count-1) > 4) 
+		    return reds[4];
+		else
+		    return reds[+d.event_count-1];
+	    }
 	})
 	.style("stroke","black")
 	.attr("stroke-width", 0.8)
@@ -108,32 +118,38 @@ d3.tsv(event_file, function (error, data) {
     // ---------------------------------------------------------------
     // add a legend for the the insertion and deletion colors 
     // ---------------------------------------------------------------
+    var barHeight = 15
+    var barWidth = 40
+    
     var legend = chart.selectAll(".legend")
-	.data(colors.range().slice(1,10).concat(colors.range().slice(10,12)))
+	.data(reds.concat(blues))
 	.enter().append("g")
 	.attr("class", "legend")
 	.attr("transform", function(d, i) {
-	    return "translate(" + (width - 160) + "," + ((i * 11) + 65) + ")";
+	    return "translate(" + (width * 0.5) + "," + ((i * barHeight + 10) + 75) + ")";
 	});
     
     legend.append("rect")
-	.attr("width", 40)
-	.attr("height", 6)
-	.style("fill", colors )
+	.attr("width", barWidth * 0.8)
+	.attr("height", barHeight * 0.8)
+	.style("fill", colors)
 	.style("stroke", "black" )
-	.attr("stroke-width", 0.5);
+	.attr("stroke-width", 1.5);
     
     legend.append("text")
-	.attr("y", 6)
-	.attr("x", 50)
+	.attr("y", barHeight / 1.5)
+	.attr("x", barWidth)
+	.style("font-size","14px")
 	//.style("text-anchor", "end")
 	.text(function(d,i) {
 	    if (i == 0) {
-		return "deletion spanning " + (i+1) + " site";
-	    } else if (i < 10) {
-		return "deletion spanning " + (i+1) + " sites";
+		return (i+1) + " site deleted";
+	    } else if (i < 4) {
+		return (i+1) + " sites deleted";
+	    } else if (i == 4) {
+		return ">= " + (i+1) + " sites deletion";
 	    } else {
-		return "insertion spanning 1 site";
+		return "1 site insertion";
 	    }
 	})
     // ---------------------------------------------------------------
@@ -142,7 +158,7 @@ d3.tsv(event_file, function (error, data) {
     chart.append("text")
         .attr("text-anchor", "middle")  // this makes it easy to centre the text as the transform is applied to the anchor
         .attr("transform", "translate("+ (width/2) +","+ -30  +")")  // centre below axis
-        .text("Event size of edits");
+        .text("INDEL size (bp)");
 
     chart.append("text")
             .attr("text-anchor", "middle")  // this makes it easy to centre the text as the transform is applied to the anchor
