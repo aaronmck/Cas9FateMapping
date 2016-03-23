@@ -113,7 +113,7 @@ class StatsFile(inputFile: String) {
   var totalHMIDs = 0
   // process all lines in the file
   statsFile.foreach{line => {
-    if ((line contains "PASS") && !(line contains "WT")) { // && !(line contains "UNKNOWN")) {
+    if ((line contains "PASS") && !(line contains "WT")) { 
       val (newHMIDString,newHMID) = lineToHMID(line)
       val replacementHMID = hmidCounts.getOrElse(newHMIDString,newHMID)
       replacementHMID.count += 1
@@ -127,14 +127,14 @@ class StatsFile(inputFile: String) {
   //(0 until 30).foreach{ind => println(sortedEvents(ind)._1 + "\t" + sortedEvents(ind)._2.count)}
 
   /** process a line into an HMID **/
-  def lineToHMID(line: String): Tuple2[String,HMID] = {
+  def lineToHMID(line: String, unknownsToNone: Boolean = true): Tuple2[String,HMID] = {
     val spl = line.split("\t")
 
     val events = new ArrayBuffer[Event]()
     val tokens = new ArrayBuffer[String]()
 
     targetStrings.foreach{case(tg) => {
-      tokens += spl(targetToPosition(tg))
+      tokens += if (spl(targetToPosition(tg) == "UNKNOWN" && unknownsToNone)) "NONE" else spl(targetToPosition(tg))
       spl(targetToPosition(tg)).split("\\&").foreach{
         subevt => {          
           events += Event.toEvent(subevt,targetToNumber(tg))

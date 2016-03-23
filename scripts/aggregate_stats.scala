@@ -7,16 +7,9 @@ import scala.util.matching.Regex
 val statsFiles = args(0).split(",")
 val output     = new PrintWriter(args(1))
 val output2    = new PrintWriter(args(2))
-var isUMI      = args(3) match {
-  case("UMI") => true
-  case("NOUMI") => false
-  case(_) => throw new IllegalStateException("Unable to parse proper UMI arg from: " + args(3))
-}
-
 
 // columns to keep
-val columnsToKeep =
-  Array[String]("readName","keep","umi","merged")
+val columnsToKeep = Array[String]("readName","keep","umi","merged")
 
 output2.write("sample\tusedEntries\ttotalEntries\n")
 output.write("sample\t" + columnsToKeep.mkString("\t") + "\t")
@@ -71,7 +64,7 @@ statsFiles.foreach{statsFileLine => {
       val sp = line.split("\t")
       val passFail = sp(headerTokens("keep")) == "PASS"
 
-      if (passFail && !(line contains "WT_") && !(line contains "UNKNOWN")) {
+      if (passFail && !(line contains "WT_")) {
         val targets = (1 until (totalMaxTargets +1)).map{case(ind) => if (headerTokens contains ("target" + ind)) sp(headerTokens("target" + ind)) else "NA"}
         val mergedCigar = targets.filter(tk => tk != "NA").mkString("-")
         val mergedTabCigar = targets.mkString("\t")
