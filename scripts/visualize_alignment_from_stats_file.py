@@ -6,6 +6,16 @@ parser.add_argument('--cutsites', help='the cutsites file', required=True)
 parser.add_argument('--umi', help='the UMI to pull out', required=True)
 args = parser.parse_args()
 
+def toLowercaseMismatch(ref,read):
+    read_ret = ""
+    for refb,readb in zip(ref,read):
+        if refb != "-" and readb != "-" and refb != readb:
+            read_ret += readb.lower()
+        else:
+            read_ret += readb.upper()
+    return read_ret
+
+
 # open the stats
 stats_file = open(args.stats)
 stats_header = stats_file.readline().strip("\n").split("\t")
@@ -44,7 +54,7 @@ for i in range(0,refLength):
 
 print "\nreference, read1 (or merged), and cutsites:"
 print stats_line[stats_header.index(refseq)]
-print stats_line[stats_header.index(token)]
+print toLowercaseMismatch(stats_line[stats_header.index(refseq)],stats_line[stats_header.index(token)])
 print cutString
 
 cutString = "only one read, see merged above"
@@ -64,5 +74,5 @@ if stats_line[stats_header.index("revRead")] != "NA":
         
 print "\nreference, read2, and cutsites:"
 print stats_line[stats_header.index("revReadRef")]
-print stats_line[stats_header.index("revRead")]
+print toLowercaseMismatch(stats_line[stats_header.index("revReadRef")],stats_line[stats_header.index("revRead")])
 print cutString

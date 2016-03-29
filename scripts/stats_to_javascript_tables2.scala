@@ -110,7 +110,6 @@ class StatsFile(inputFile: String) {
   val targetToPosition = targetStrings.map{case(tg) => (tg,header.indexOf(tg))}.toMap
   val targetToNumber = targetStrings.map{case(tg) => (tg,tg.slice(tg.length-1,tg.length).toInt)}.toMap
 
-  var totalHMIDs = 0
   // process all lines in the file
   statsFile.foreach{line => {
     if ((line contains "PASS") && !(line contains "WT")) { 
@@ -118,13 +117,12 @@ class StatsFile(inputFile: String) {
       val replacementHMID = hmidCounts.getOrElse(newHMIDString,newHMID)
       replacementHMID.count += 1
       hmidCounts(newHMIDString) = replacementHMID
-      totalHMIDs += 1
     }
   }}
-  val aboveThresh = hmidCounts.filter{case(str,id) => id.count >= 10}.size
-  println("Processed " + hmidCounts.size + " unique HMIDs, with " + aboveThresh + " having 10 of more occurances, from a total of " + totalHMIDs + " HMIDs in the file")
+  val totalHMIDs = hmidCounts.map{case(str,id) => id.count}.sum
+  println("total " + totalHMIDs)
   val sortedEvents = hmidCounts.toSeq.sortBy(_._2.count).toArray.reverse
-  //(0 until 30).foreach{ind => println(sortedEvents(ind)._1 + "\t" + sortedEvents(ind)._2.count)}
+  println("total " + sortedEvents.map{case(evt,obj) => obj.count}.sum)
 
   /** process a line into an HMID **/
   def lineToHMID(line: String, unknownsToNone: Boolean = true): Tuple2[String,HMID] = {
@@ -134,10 +132,12 @@ class StatsFile(inputFile: String) {
     val tokens = new ArrayBuffer[String]()
 
     targetStrings.foreach{case(tg) => {
-      tokens += if (spl(targetToPosition(tg) == "UNKNOWN" && unknownsToNone)) "NONE" else spl(targetToPosition(tg))
+      val toAdd = if (spl(targetToPosition(tg)) == "UNKNOWN" && unknownsToNone) "NONE" else spl(targetToPosition(tg))
+      tokens += toAdd
       spl(targetToPosition(tg)).split("\\&").foreach{
-        subevt => {          
-          events += Event.toEvent(subevt,targetToNumber(tg))
+        subevt => {
+          val converteSubEvt = if (subevt == "UNKNOWN" && unknownsToNone) "NONE" else subevt
+          events += Event.toEvent(converteSubEvt,targetToNumber(tg)) // -- make sure we only propigate NONEs, not UNKNOWNs
         }
       }
     }}

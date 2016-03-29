@@ -440,7 +440,7 @@ d3.tsv(top_read_melted_to_base, function (error, data) {
 
 
 function redraw_read_block() {
-    var local_rbd = read_block_data.filter(function(d){ return +d.array <= topHMIDs; })
+    var local_rbd = read_block_data.filter(function(d){ return +d.array < topHMIDs; })
     
     var readCount = parseInt(d3.max(local_rbd , function (d) {
         return +d.array;

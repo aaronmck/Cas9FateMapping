@@ -126,7 +126,7 @@ d3.tsv(event_file, function (error, data) {
 	.enter().append("g")
 	.attr("class", "legend")
 	.attr("transform", function(d, i) {
-	    return "translate(" + (width * 0.5) + "," + ((i * barHeight + 10) + 75) + ")";
+	    return "translate(" + (width * 0.4) + "," + ((i * barHeight + 10) + 75) + ")";
 	});
     
     legend.append("rect")
@@ -139,17 +139,17 @@ d3.tsv(event_file, function (error, data) {
     legend.append("text")
 	.attr("y", barHeight / 1.5)
 	.attr("x", barWidth)
-	.style("font-size","14px")
+	.style("font-size","12px")
 	//.style("text-anchor", "end")
 	.text(function(d,i) {
 	    if (i == 0) {
-		return (i+1) + " site deleted";
+		return (i+1) + " site affected, deletion";
 	    } else if (i < 4) {
-		return (i+1) + " sites deleted";
+		return (i+1) + " sites affected, deletion";
 	    } else if (i == 4) {
-		return ">= " + (i+1) + " sites deletion";
+		return ">= " + (i+1) + " sites affected, deletion";
 	    } else {
-		return "1 site insertion";
+		return "1 site affected, insertion";
 	    }
 	})
     // ---------------------------------------------------------------
