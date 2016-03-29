@@ -50,7 +50,7 @@ case class Config(inputFileReads1: File = new File(UMIProcessing.NOTAREALFILENAM
                   primersEachEnd: File = new File(UMIProcessing.NOTAREALFILENAME),
                   samplename: String = "TEST",
                   minimumUMIReads: Int = 5,
-                  minimumSurvivingUMIReads: Int = 2)
+                  minimumSurvivingUMIReads: Int = 3)
 
 
 
