@@ -10,7 +10,7 @@ import scala.main.SequencingRead
 import main.scala.utils._
 
 /**
-  * handles the somewhat complex process of merging down read with matching UMIs
+  * handles the process of merging down read with matching UMIs
   */
 object UMIMerger {
 

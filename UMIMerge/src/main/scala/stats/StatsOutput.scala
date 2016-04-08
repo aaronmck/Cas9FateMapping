@@ -38,7 +38,7 @@ object StatsOutput {
   def endline = "\n"
 
   // return the standard header items that all stats files have
-  val standardHeaderItemsArray = Array[String]("readName", "keep", "hasForwardPrimer", "hasReversePrimer"
+  val standardHeaderItemsArray = Array[String]("readName", "keep", "conflict", "hasForwardPrimer", "hasReversePrimer"
     , "umi", "merged", "mergedReadLen", "read1len",
     "read2len", "finalReadCount1", "finalReadCount2", "matchRate1",
     "matchRate2", "alignedBases1", "alignedBases2")
@@ -64,7 +64,7 @@ object StatsOutput {
 
 // case class that must be filled out to output data into a stats file.  It enforces type checking
 // which is nice, and formats the strings for output
-case class StatsContainer(name: String, keep: Boolean, hasFWDPrimer: Boolean, hasREVPrimer: Boolean, isUMI: Boolean,
+case class StatsContainer(name: String, keep: Boolean, isConflicted: Boolean, hasFWDPrimer: Boolean, hasREVPrimer: Boolean, isUMI: Boolean,
                           isMerged: Boolean, read1Len: Int, read2Len: Int, finalRead1Count: Int,
                           finalRead2Count: Int, matchRate1: Double, matchRate2: Double, alignedBases1: Int,
                           alignedBases2: Int, targetEvents: Array[String], targetSequences: Array[String],
@@ -91,6 +91,9 @@ case class StatsContainer(name: String, keep: Boolean, hasFWDPrimer: Boolean, ha
   // convert the umi boolean tag to a string
   def convertUMI(umiB: Boolean): String = if (umiB) "UMI" else "AMPLICON"
 
+  // convert the umi boolean tag to a string
+  def convertConflicted(conflicted: Boolean): String = if (conflicted) "CONFLICTED" else "CONSISTENT"
+
   def createReadStrings(): String = {
     val rdFwd = alignedFWDRead.getOrElse("NA")
     val rdRev = alignedRVSRead.getOrElse("NA")
@@ -106,6 +109,7 @@ case class StatsContainer(name: String, keep: Boolean, hasFWDPrimer: Boolean, ha
   def outputString(outputReadStrings: Boolean) =
     convertName(name) + StatsOutput.sepString +
       convertKeep(keep) + StatsOutput.sepString +
+      convertConflicted(isConflicted) + StatsOutput.sepString +
       hasFWDPrimer + StatsOutput.sepString +
       hasREVPrimer + StatsOutput.sepString +
       convertUMI(isUMI) + StatsOutput.sepString +

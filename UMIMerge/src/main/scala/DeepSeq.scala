@@ -145,7 +145,7 @@ object DeepSeq extends App {
 
     val pass = (containsFwdPrimer && containsRevPrimer && callEvents.matchingRate > .85 && callEvents.matchingBaseCount> 50 && !(callEvents.alignments.mkString("") contains "WT_"))
 
-    outputStatsFile.outputStatEntry(StatsContainer(mergedRead.read.name, pass, containsFwdPrimer, containsRevPrimer,
+    outputStatsFile.outputStatEntry(StatsContainer(mergedRead.read.name, pass, callEvents.collision, containsFwdPrimer, containsRevPrimer,
       false, true, baseLen, -1, 1, 1, callEvents.matchingRate, -1.0, callEvents.matchingBaseCount, -1,
       callEvents.alignments, callEvents.basesOverTargets, None, None, Some(mergedRead.read.bases), None, None, Some(mergedRead.reference.bases)))
 
@@ -174,11 +174,33 @@ object DeepSeq extends App {
     val pass = containsFwdPrimer && containsRevPrimer &&
       callEvents.matchingRate1 > .85 && callEvents.matchingRate2 > .85 &&
       callEvents.matchingBaseCount1 > 25 && callEvents.matchingBaseCount2 > 25 &&
-      !(callEvents.alignments.mkString("") contains "WT_")
+      !(callEvents.alignments.mkString("") contains "WT_") &&
+      !callEvents.collision
 
-    outputStatsFile.outputStatEntry(StatsContainer(readPairs.pair1.read.name, pass, containsFwdPrimer, containsRevPrimer,
-      false, false, base1Len, base2Len, 1, 1, callEvents.matchingRate1, callEvents.matchingRate2, callEvents.matchingBaseCount1, callEvents.matchingBaseCount2,
-      callEvents.alignments, callEvents.basesOverTargets, Some(readPairs.pair1.read.bases), Some(readPairs.pair2.read.bases), None, Some(readPairs.pair1.reference.bases), Some(readPairs.pair2.reference.bases), None))
+    outputStatsFile.outputStatEntry(
+      StatsContainer(readPairs.pair1.read.name,
+        pass,
+        callEvents.collision,
+        containsFwdPrimer,
+        containsRevPrimer,
+        false,
+        false,
+        base1Len,
+        base2Len,
+        1,
+        1,
+        callEvents.matchingRate1,
+        callEvents.matchingRate2,
+        callEvents.matchingBaseCount1,
+        callEvents.matchingBaseCount2,
+        callEvents.alignments,
+        callEvents.basesOverTargets,
+        Some(readPairs.pair1.read.bases),
+        Some(readPairs.pair2.read.bases),
+        None,
+        Some(readPairs.pair1.reference.bases),
+        Some(readPairs.pair2.reference.bases),
+        None))
 
   }
 }

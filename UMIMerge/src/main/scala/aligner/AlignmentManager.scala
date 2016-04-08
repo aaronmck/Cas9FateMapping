@@ -51,6 +51,10 @@ object AlignmentManager {
    * @return a list of alignments over the read/ref combo, and a list of sequences over the target
    */
   def callEdits(reference: String, read: String, minMatchOnEnd: Int, cutSites: CutSites, debugInfo: Boolean = false): Tuple2[List[Alignment], List[String]] = {
+
+    if (reference.length != read.length)
+      throw new IllegalStateException("The read and reference lengths are unequal!")
+
     var referencePos = 0
     var inRef = false
 
@@ -165,21 +169,15 @@ object AlignmentManager {
     fwdRead.read.reverseCompAlign = false
     revRead.read.reverseCompAlign = true
 
-    val alignmentsF = if (!fwdRead.aligned) {
-      Waterman.alignTo(Array[SequencingRead](fwdRead.read), Some(fwdRead.reference.bases), debug)
-    } else {
-      Array[SequencingRead](fwdRead.reference,fwdRead.read)
-    }
-    val alignmentsR = if (!revRead.aligned) {
-      Waterman.alignTo(Array[SequencingRead](revRead.read), Some(revRead.reference.bases), debug)
-    } else {
-      Array[SequencingRead](revRead.reference,revRead.read)
-    }
+    val alignmentsF = Array[SequencingRead](fwdRead.reference,fwdRead.read)
+    val alignmentsR = Array[SequencingRead](revRead.reference,revRead.read)
 
     val events1 = AlignmentManager.callEdits(alignmentsF(0).bases, alignmentsF(1).bases, minMatchOnEnd, cutSites)
     val events2 = AlignmentManager.callEdits(alignmentsR(0).bases, alignmentsR(1).bases, minMatchOnEnd, cutSites)
 
-    val combined = editsToCutSiteCalls(List[List[Alignment]](events1._1, events2._1), List[List[String]](events1._2, events2._2), cutSites, debug)
+    val combined = editsToCutSiteCalls(
+      List[List[Alignment]](events1._1, events2._1),
+      List[List[String]](events1._2, events2._2), cutSites, debug)
 
     val matchRate1 = percentMatch(alignmentsF(0).bases, alignmentsF(1).bases)
     val matchRate2 = percentMatch(alignmentsR(0).bases, alignmentsR(1).bases)
@@ -226,10 +224,7 @@ object AlignmentManager {
 
     mergedRead.read.reverseCompAlign = false
 
-    val alignmentsMerged = if (!mergedRead.aligned)
-      Waterman.alignTo(Array[SequencingRead](mergedRead.read), Some(mergedRead.reference.bases), debug)
-    else
-      Array[SequencingRead](mergedRead.reference, mergedRead.read)
+    val alignmentsMerged = Array[SequencingRead](mergedRead.reference, mergedRead.read)
 
     val events1 = AlignmentManager.callEdits(alignmentsMerged(0).bases, alignmentsMerged(1).bases, minMatchOnEnd, cutSites)
 
@@ -283,7 +278,7 @@ object AlignmentManager {
 
     cutSites.windows.zipWithIndex.foreach { case ((start, cut, end), cutSiteIndex) => {
       var candidates = Array[String]()
-      var matchOverlap = false
+      var cigarMatchOverlapsEdit = false
       var nonWildType = Array[String]()
       var referenceSeq = Array[String]()
 
@@ -303,7 +298,7 @@ object AlignmentManager {
             simgleSampleEvent :+= edit.toEditString
 
           } else if (edit.cigarCharacter == "M" && span(edit.refPos, edit.refPos + edit.refBase.length, start, end)) {
-            matchOverlap = true
+            cigarMatchOverlapsEdit = true
           }
         }}
         if (simgleSampleEvent.size > 0 && !(candidates contains simgleSampleEvent.mkString("&")))
@@ -322,8 +317,10 @@ object AlignmentManager {
         case _ => retTargetSeq :+= nonWildType.mkString(",")
       }
 
-      // look at the number of candidate events, if there is WT sequence covering the locus, figure out what we should do with the edit
-      (candidates.size, matchOverlap) match {
+      // look at the number of candidate events,
+      // if there is WT sequence covering the locus,
+      // figure out what we should do with the edit
+      (candidates.size, cigarMatchOverlapsEdit) match {
         case (0, true) => {
           ret :+= "NONE"
         }

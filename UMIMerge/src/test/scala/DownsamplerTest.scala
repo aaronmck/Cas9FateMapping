@@ -1,7 +1,6 @@
 package test.scala
 
 import aligner.AlignmentManager$
-import main.scala.Downsampler
 import utils.CutSites
 
 import org.scalatest.{Matchers, FlatSpec}
@@ -12,7 +11,7 @@ import scala.main.{ForwardReadOrientation, SequencingRead}
  * Created by aaronmck on 11/29/15.
  */
 class DownsamplerTest extends FlatSpec with Matchers {
-
+/*
   "A DownsamplerTest" should "find the right subset correctly" in {
     val readSeq =   "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTT"
     val readSeq2 =  "TTTTTTTT--------------TTTTTTTT"
@@ -38,5 +37,5 @@ class DownsamplerTest extends FlatSpec with Matchers {
     val ret = Downsampler.downsample(Array[SequencingRead](testRead), 1)
     ret.size should be (1)
     ret(0).averageQual() should be (33.0)
-  }
+  }*/
 }

@@ -62,7 +62,7 @@ case class SortedReads(read1: SequencingRead, read2: SequencingRead) extends Ord
   val totalAverageQual = (read1.averageQual() * read1.length + read2.averageQual() * read2.length ) / (read1.length + read2.length).toDouble
   implicitly[Ordering[Tuple2[Int, Int]]].compare((1,2), (2,3))
 
-  // compare the events in reverse order -- we want to drop sort in anti qual order
+  // compare the events in reverse order -- we want to drop sorted reads in anti qual order
   def compare(that: SortedReads): Int =
     if (this.totalAverageQual == that.totalAverageQual)
       this.read1.length - that.read1.length
