@@ -143,7 +143,8 @@ object DeepSeq extends App {
 
     val callEvents = AlignmentManager.cutSiteEvent(mergedRead, cutsSiteObj)
 
-    val pass = (containsFwdPrimer && containsRevPrimer && callEvents.matchingRate > .85 && callEvents.matchingBaseCount> 50 && !(callEvents.alignments.mkString("") contains "WT_"))
+    val pass = (containsFwdPrimer && containsRevPrimer && callEvents.matchingRate > .85 &&
+      callEvents.matchingBaseCount> 50 && !(callEvents.alignments.mkString("") contains "WT_")) && !callEvents.collision
 
     outputStatsFile.outputStatEntry(StatsContainer(mergedRead.read.name, pass, callEvents.collision, containsFwdPrimer, containsRevPrimer,
       false, true, baseLen, -1, 1, 1, callEvents.matchingRate, -1.0, callEvents.matchingBaseCount, -1,

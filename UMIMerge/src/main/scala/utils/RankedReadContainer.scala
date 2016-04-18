@@ -8,6 +8,7 @@ import scala.math.Ordering.Implicits._
  * evaluate reads on the fly, limiting our container to a specified size of high-quality reads, but recording the total numbers we saw
  */
 class RankedReadContainer(umi: String, maxSize: Int) {
+  var totalReads = 0
   var totalPassedReads = 0
   var noPrimer1 = 0
   var noPrimer2 = 0
@@ -24,6 +25,8 @@ class RankedReadContainer(umi: String, maxSize: Int) {
    * @param containsPrimer2 does the second read contain the primer?
    */
   def addRead(seq1: SequencingRead, containsPrimer1: Boolean, seq2: SequencingRead, containsPrimer2: Boolean): Unit = {
+    totalReads += 1
+
     if (containsPrimer1 && containsPrimer2) {
       totalPassedReads += 1
       pQ += SortedReads(seq1, seq2)
