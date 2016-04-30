@@ -114,11 +114,11 @@ function redrawTheTopHistgram() {
         });
     }));
 
-    var maxVal = endPos // d3.max(local_rbd , function (d) {return +d.length})
-    var minVal = startPos // d3.min(local_rbd , function (d) {return +d.position})
-    var xEvents = d3.scale.linear().domain([0,maxVal - minVal]).range([margin_left, global_width]);
-
-    var yMax = Math.max(d3.max(muts[0].map(function (d) {return d.y;})),d3.max(muts[1].map(function (d) {return d.y;})))
+    var xEvents = d3.scale.ordinal().domain(muts[0].map(function (d) {
+        return +d.x;
+    })).rangeBands([margin_left, global_width]);
+    
+    var yMax = d3.max(muts[0].map(function (d) {return d.y;}))
     
     var yEvents = d3.scale.linear().domain([0, yMax]).range([global_height, 0]);
     var formatter = d3.format("2.1%");
@@ -309,7 +309,7 @@ function changeHistogram() {
 // ************************************************************************************************************
 function redrawHistogram() {
 
-    var local_occur_data = occurance_data.filter(function(d){ return +d.array < topHMIDs; })
+    var local_occur_data = occurance_data.filter(function(d){ return +d.array <= topHMIDs; })
 
     
     // find the maximum number of reads
@@ -440,7 +440,7 @@ d3.tsv(top_read_melted_to_base, function (error, data) {
 
 
 function redraw_read_block() {
-    var local_rbd = read_block_data.filter(function(d){ return +d.array < topHMIDs; })
+    var local_rbd = read_block_data.filter(function(d){ return +d.array <= topHMIDs; })
     
     var readCount = parseInt(d3.max(local_rbd , function (d) {
         return +d.array;

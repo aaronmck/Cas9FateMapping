@@ -62,6 +62,7 @@ gg = ggplot(embryo_uniques) +
   geom_hline(aes(yintercept=3000),color="white") +
   geom_hline(aes(yintercept=4000),color="white") +
   theme(axis.text.x = element_blank()) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) + 
   theme(legend.position="none")
 ggsave(gg,file="~/Desktop/unique_HMIDs_by_embryo.png",width=8,height=1.5)
 ggsave(gg,file="~/Desktop/unique_HMIDs_by_embryo.svg",width=8,height=1.5)
@@ -72,7 +73,7 @@ embryo_uniques = embryo_uniques[order(embryo_uniques$stage,embryo_uniques$passHM
 embryo_uniques$index = seq(1,nrow(embryo_uniques))
 embryo_uniques$sample = factor(embryo_uniques$sample,levels=embryo_uniques$sample)
 
-# plot by concentation and timepoint
+# plot passing
 gg2 = ggplot(embryo_uniques) + 
   geom_bar(aes(sample,passHMIDs,fill=stage),stat="identity",width=.7) + 
   scale_fill_manual(values=dev_colors) + 
@@ -87,6 +88,7 @@ gg2 = ggplot(embryo_uniques) +
   geom_hline(aes(yintercept=20000),color="white") +
   geom_hline(aes(yintercept=30000),color="white") +
   theme(axis.text.x = element_blank()) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
   theme(legend.position="none")
 ggsave(gg2,file="~/Desktop/total_HMIDs_by_embryo.png",width=8,height=1.5)
 ggsave(gg2,file="~/Desktop/total_HMIDs_by_embryo.svg",width=8,height=1.5)
@@ -113,6 +115,7 @@ gg4 = ggplot(embryo_uniques) +
   geom_hline(aes(yintercept=2),color="white") +
   geom_hline(aes(yintercept=4),color="white") +
   geom_hline(aes(yintercept=6),color="white") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
   theme(legend.position="none") +
   ylim(c(0,10))
 
