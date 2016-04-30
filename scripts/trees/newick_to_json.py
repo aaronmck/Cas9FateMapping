@@ -268,6 +268,7 @@ def loadSampleMap(fl):
     for line in sampleFile:
         sp = line.strip("\n").split("\t")
         sampleToNameAndColor[sp[0]] = (sp[1],sp[2])
+        print sp[0] + " -> (" + sp[1] + "," + sp[2] + ")"
     return sampleToNameAndColor
 
 
@@ -330,6 +331,7 @@ for leaf in adult_tree:
             old_name = node.name
             node = node.up
 
+            
 # --------------------------------------------------------------------------------------------------------------
 # reroot the tree and get a new node -> parent relationship dict
 adult_tree.set_outgroup(args.rootname)

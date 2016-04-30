@@ -103,7 +103,7 @@ def analyze_stats_file(stats_file, sample, target_count, ref_name, reference, um
     
     # process each line in the stats file
     for line in statf:
-        if "PASS" in line and not "WT" in line and not "UNKNOWN" in line:
+        if "PASS" in line and not "WT" in line: #  and not "UNKNOWN" in line:
             row_count += 1
             hmid = []
 
@@ -132,8 +132,16 @@ def analyze_stats_file(stats_file, sample, target_count, ref_name, reference, um
                     edits_in_row += 1
                     unique_edits_in_row[event] = unique_edits_in_row.get(event,0) + 1
 
+                # convert UNKNOWNS to NONEs for this calculation
+                if event == "UNKNOWN":
+                    event = "NONE"
+                
                 hmid.append(event)
 
+
+            if "UNKNOWN" in "_".join(hmid):
+                print "FUUUUCK " + "_".join(hmid)
+                
             for sequence, pos in sequence_positions.iteritems():
                 read_sequence = tokens[pos]
                 if read_sequence[0:20] == cutSiteToSeq[sequence] and read_sequence[21:23] == "GG":
@@ -177,11 +185,24 @@ def analyze_stats_file(stats_file, sample, target_count, ref_name, reference, um
     edits_mean = np.mean(row_edits_counts)
     cuts_mean = np.mean(cuts_per_row)
     intact_mean = np.mean(row_intact_counts)
+
+    out_row_failure = float(row_failed)/float(row_count)
+    out_edited_rows = float(rows_edited)/float(row_count)
+
+    out_failed_prim1 = 0.0
+    out_failed_prim2 = 0.0
+    out_failed_align = 0.0
+    if (row_failed > 0):
+        out_failed_prim1 = float(row_failed_primer1)/float(row_failed)
+        out_failed_prim2 = float(row_failed_primer2)/float(row_failed)
+        out_failed_align = float(row_failed_alignment)/float(row_failed)
+        
+    out_unknown_lines = float(unknown_lines)/float(row_count)
     
     return_str =  experiment_name + "\t" + sample + "\t" + ref_name + "\t" + str(umi) + "\t"
-    return_str += str(row_count) + "\t" + str(len(hmid_to_count)) + "\t" + str(float(row_failed)/float(row_count+row_failed)) + "\t" + str(float(rows_edited)/float(row_count)) + "\t"
-    return_str += str(float(row_failed_primer1)/float(row_failed)) + "\t" + str(float(row_failed_primer2)/float(row_failed)) + "\t" + str(float(row_failed_primer2)/float(row_failed)) + "\t"
-    return_str += str(edits_mean) + "\t" + str(cuts_mean) + "\t" + str(intact_mean) + "\t" + str(float(unknown_lines)/float(row_count)) + "\t"
+    return_str += str(row_count) + "\t" + str(len(hmid_to_count)) + "\t" + str(out_row_failure) + "\t" + str(out_edited_rows) + "\t"
+    return_str += str(out_failed_prim1) + "\t" + str(out_failed_prim2) + "\t" + str(out_failed_align) + "\t"
+    return_str += str(edits_mean) + "\t" + str(cuts_mean) + "\t" + str(intact_mean) + "\t" + str(out_unknown_lines) + "\t"
     return_str += str(hmid_median) + "\t" + str(insertion_median) + "\t" + str(deletion_median) + "\t"
     
     output_tags = []

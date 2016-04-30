@@ -13,6 +13,7 @@ val mixCommandFile = new PrintWriter(args(2))
 val annotationFile = new PrintWriter(args(3))
 val weightFile = new PrintWriter(args(4))
 val eventsToNumbers = new PrintWriter(args(5))
+val dropWT = true
 
 // --------------------------------------------------
 // all reads object
@@ -24,12 +25,17 @@ case class Event(events: Array[String], eventNumbers: Array[Int], count: Int, pr
   val paddedName = name + (0 until (10 - name.length)).map{i => " "}.mkString("")
 
   // make a binary representation of the events
-  def toMixString(index: Int): String = {
-    paddedName + (1 until index).map{ind => {
-      if (eventNumbers contains ind)
+  def toMixString(index: Int): Tuple2[String,Boolean] = {
+    var isWT = true
+    val ret = paddedName + (1 until index).map{ind => {
+      if (eventNumbers contains ind) {
+        isWT = false
         "1"
-      else "0"
+      } else {
+        "0"
+      }
     }}.mkString("")
+    return (ret,isWT)
   }
 }
 val eventsBuffer = new ArrayBuffer[Event]()
@@ -114,18 +120,29 @@ weightFile.close()
 // -----------------------------------------------------------------------------------
 // for each event, output the name and events
 // -----------------------------------------------------------------------------------
-output.write((eventsBuffer.toArray.size + 1) + "\t" + (nextIndex - 3) + "\n")
+// output.write((eventsBuffer.toArray.size + 1) + "\t" + (nextIndex - 3) + "\n")
 
-// (events: Array[String], eventNumbers: Array[String], count: Int, proportion: Float, sample: String, name: String)
 annotationFile.write("taxa\tsample\tcount\tproportion\tevent\n")
-output.write("root      " + (1 until nextIndex).map{index => "0"}.mkString("") + "\n")
+//output.write("root      " + (1 until nextIndex).map{index => "0"}.mkString("") + "\n")
 
+// buffer the output strings
+var outputBuffer = Array[String]()
 eventsBuffer.toArray.foreach{evt => {
-  output.write(evt.toMixString(nextIndex) + "\n")
-  annotationFile.write(evt.name + "\t" + evt.sample + "\t" + evt.count + "\t" + evt.proportion + "\t" + evt.events.mkString("_") + "\n")
+  val outputStr = evt.toMixString(nextIndex)
+  if (!outputStr._2) {
+    outputBuffer :+= outputStr._1
+    annotationFile.write(evt.name + "\t" + evt.sample + "\t" + evt.count + "\t" + evt.proportion + "\t" + evt.events.mkString("_") + "\n")
+  }
 }}
 
 annotationFile.close()
+
+output.write((outputBuffer.size + 1) + "\t" + (nextIndex - 3) + "\n")
+output.write("root      " + (1 until nextIndex).map{index => "0"}.mkString("") + "\n")
+outputBuffer.foreach{case(str) => {
+  output.write(str + "\n")
+}}
+
 output.close()
 
 eventsToNumbers.write("event\tnumber\n")
