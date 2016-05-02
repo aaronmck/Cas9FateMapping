@@ -75,6 +75,7 @@ object RichNode {
     rootNode.parsimonyEvents = Array[String]("NONE" * numberOfTargets)
 
     // now lookup each link between a subnode and the root, and assign it's genotypes recursively
+    rootNode.children.foreach{newChild => recAssignGentoypes(rootNode,newChild,parser)}
   }
 
   /**

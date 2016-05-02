@@ -27,4 +27,8 @@ class ParsimonyProcessor(mixTrees: File, mixOutput: File, annotations: File, sam
 
   // traverse the nodes and add names to any internal nodes without names
   val rootNode = treeParser.getRoot
+
+  // now apply the parsimony results to the root of the tree (recursively walking down the nodes)
+  RichNode.applyParsimonyGenotypes(rootNode, mixParser)
+
 }

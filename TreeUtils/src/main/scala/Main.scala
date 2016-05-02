@@ -66,26 +66,7 @@ object Main extends App {
 
   // *********************************** Run *******************************************************
   parser.parse(args, TreeConfig()) map {
-    config: TreeConfig => {
 
-      // load up the annotation manager
-      println("Loading annotation manager from your annotation file...")
-      val annotManager = AnnotationManager(config.mappingFile.getAbsolutePath)
-
-      println("finding X% pure subtrees from your data...")
-      findPureBranches(config.inputTree.getAbsolutePath,0.95, 0,annotManager, config.outputSubTrees.getAbsolutePath, 10000 )
-
-      /*
-      val cutHeight = 60.0
-
-      println(root.getHeight)
-      getAverageLeafDistanceToRoot(root)
-
-      val output  = new PrintWriter(config.outputSubTrees)
-      getSubtreesAtSetHeight(root,output,cutHeight)
-      //getSubtreesAtSetDivisions(root,output,5)
-      output.close()
-      */
     }
   } getOrElse {
     println("Unable to parse the command line arguments you passed in, please check that your parameters are correct")
