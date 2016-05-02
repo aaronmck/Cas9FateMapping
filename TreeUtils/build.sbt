@@ -12,9 +12,9 @@ libraryDependencies += "com.github.scopt" %% "scopt" % "3.3.0"
 
 libraryDependencies += "org.scalatest" % "scalatest_2.11" % "2.2.4" % "test"
 
-libraryDependencies += "io.spray" %%  "spray-json" % "1.3.2"
-
 libraryDependencies += "org.scalatest" % "scalatest_2.11" % "2.2.4"
+
+libraryDependencies += "com.google.code.gson" % "gson" % "2.6.2"
 
 scalacOptions += "-target:jvm-1.7"
 
