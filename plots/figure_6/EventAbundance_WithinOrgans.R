@@ -34,6 +34,10 @@ pattern <- ""
 # make a grep-able version of the event string, replace the example with your event
 pattern <- gsub("\\+", "\\\\+", "24D+136_NONE_NONE_9D+217_12D+244_87D+265_87D+265_87D+265_87D+265_NONE")
 
+# --------
+# OUTPUT
+# --------
+
 # for every tissue, show proportion and counts of this edit(s)
 for (i in 1:12){
   results$prop[i] <- sum(all.list[[i]]$count[grep(pattern, all.list[[i]]$event)])/sum(all.list[[i]]$count)
@@ -41,5 +45,5 @@ for (i in 1:12){
 }
 results
 
-# number of different HMIDs within this clade 
+# number of alleles (i.e. different HMIDs) within this clade 
 length(unique(all[grep(pattern, all$event),]$event))
