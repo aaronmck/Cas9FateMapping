@@ -44,10 +44,10 @@ all.list <- lapply(all.list, function(x) {
 
 
 # ---------------
-# remove blood HMIDs from all organs
+# remove blood alleles from all organs
 # ---------------
 
-# make a grep-compatible vector of all the blood HMIDs (deal with the '+' character)
+# make a grep-compatible vector of all the blood alleles (deal with the '+' character)
 blood.hmids <- gsub("\\+", "\\\\+", blood$event)
 
 # remove the top blood alleles (default is 5)
