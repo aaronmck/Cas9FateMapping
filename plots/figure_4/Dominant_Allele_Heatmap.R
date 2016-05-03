@@ -152,8 +152,7 @@ heatmap.2(t(top.alleles.scaled), col = cols, labRow = names,
 
 # ---------------
 # output a cleaner version of top.alleles for browsing 
-# BROKEN RIGHT NOW
 # ---------------
 
-top.alleles.x <- cbind(name=top.alleles.events, as.data.frame(top.alleles))
-write.csv(top.alleles.x, file="top.alleles.new.csv")
+top.alleles.x <- cbind(name=top.alleles.events[-1], as.data.frame(top.alleles))
+write.csv(top.alleles.x, file="dominant.alleles.csv")
