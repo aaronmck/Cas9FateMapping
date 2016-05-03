@@ -76,14 +76,14 @@ class MixParser(mixOutput: String, eventsToNumbers: String, treeToUse: Int) {
             if (currentGenotype.isDefined) {
               treeToGenotypes(currentTreeNumber) += currentGenotype.get
             }
-            val sp = line.stripPrefix(" ").split(" ")
+            val sp = line.trim.split(" +")
             currentGenotype = Some(Edge(sp(0), sp(1), sp(2) == "yes", currentTreeNumber))
             currentGenotype.get.addChars(sp.slice(3, sp.size).mkString(""))
           }
         }
         else if (inGenotypeSection) {
           if (currentTreeNumber == treeToUse) {
-            val sp = line.stripPrefix(" ").split(" ")
+            val sp = line.trim.split(" +")
             currentGenotype.get.addChars(sp.slice(0, sp.size).mkString(""))
           }
         }
@@ -103,6 +103,9 @@ class MixParser(mixOutput: String, eventsToNumbers: String, treeToUse: Int) {
     activeTree = Some(treeToGenotypes(treeToUse).toArray)
   }
 
+
+  // **********************************************************************
+
   /*
    * helper functions
    */
@@ -121,6 +124,7 @@ class MixParser(mixOutput: String, eventsToNumbers: String, treeToUse: Int) {
       throw new IllegalStateException("Found " + ret.size + " edges for node " + toNode)
     ret(0)
   }
+
 }
 
 case class Edge(from: String, to: String, changes: Boolean, treeNumber: Int) {

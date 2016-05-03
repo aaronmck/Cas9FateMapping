@@ -15,7 +15,7 @@ case class RichNode(originalNd: Node,
                     parent: Option[RichNode],
                     numberOfTargets: Int = 10) {
 
-  val name = originalNd.getID
+  var name = originalNd.getID
 
   val originalNode = originalNd
 
@@ -31,20 +31,21 @@ case class RichNode(originalNd: Node,
   }
 
   // explicitly pull out our event string
-  val eventString = if (myAnnotations.isDefined) Some(myAnnotations.get.event) else None
+  val eventString: Option[Array[String]] = if (myAnnotations.isDefined) Some(myAnnotations.get.event.split(annotations.eventSeperator)) else None
 
   // now store each of our children
   var children = Array[RichNode]()
 
   // store the events on each child branch we see
-  var childrenEvents = Array[Array[String]]()
-  var parsimonyEvents = Array[String]()
+  var childrenEvents = Array[String]()
+  val parsimonyEvents = Array.fill(numberOfTargets)("NONE")
 
   originalNd.getChildren.asScala.foreach{nd => {
     val newChild = RichNode(nd, annotations, Some(this))
 
     // get the aggregate children events
-    childrenEvents :+= newChild.childrenEvents.flatMap(x => x)
+    newChild.eventString.foreach(mp => childrenEvents :+= mp.mkString(annotations.eventSeperator))
+    newChild.childrenEvents.foreach{mp => childrenEvents :+= mp}
 
     // add to our existing taxa proportions
     newChild.taxaProportions.foreach{
@@ -55,8 +56,19 @@ case class RichNode(originalNd: Node,
     children :+= newChild
   }}
 
+  def isCollapsible(): Option[Tuple3[String,Int,RichNode]] = {
+    if (childrenEvents.size > 1) {
+      if (childrenEvents.toSet.size == 1) {
+        return Some(new Tuple3[String,Int,RichNode](childrenEvents.toSet.mkString(","),childrenEvents.size,this))
+      }
+    }
+    return None
+  }
 }
 
+/**
+  * We use the static methods here to transform nodes after they're created.
+  */
 object RichNode {
   def toRichTree(inputTree: TreeParser, annotationsManager: AnnotationsManager): RichNode = {
     return RichNode(inputTree.getRoot, annotationsManager, None)
@@ -71,10 +83,7 @@ object RichNode {
     * @param parser the results from the parsimony run
     */
   def applyParsimonyGenotypes(rootNode: RichNode, parser: MixParser, numberOfTargets: Int = 10): Unit = {
-    // assign the root node to the default NONEs
-    rootNode.parsimonyEvents = Array[String]("NONE" * numberOfTargets)
-
-    // now lookup each link between a subnode and the root, and assign it's genotypes recursively
+    // lookup each link between a subnode and the root, and assign it's genotypes recursively
     rootNode.children.foreach{newChild => recAssignGentoypes(rootNode,newChild,parser)}
   }
 
@@ -87,7 +96,7 @@ object RichNode {
     */
   def recAssignGentoypes(parent: RichNode, child: RichNode, parser: MixParser): Unit = {
     // copy the parents genotype over to the child
-    child.parsimonyEvents = parent.parsimonyEvents.clone()
+    parent.parsimonyEvents.zipWithIndex.foreach{case(edit,index) => child.parsimonyEvents(index) = edit}
 
     // find the link from out parent node -- there should only be one edge leading to this node ever
     val link = parser.lookupTos(child.name)
@@ -108,6 +117,39 @@ object RichNode {
 
     // now for each of the children of this node, recursively assign genotypes
     child.children.foreach{newChild => recAssignGentoypes(child,newChild,parser)}
+  }
+
+  def recAssignNames(node: RichNode, parser: MixParser): String = {
+    // if we have a leaf -- where there are no children -- assign the name
+    if (node.children.size == 0) {
+      val edge = parser.lookupTos(node.name)
+      return edge.from
+    } else {
+      val names = node.children.map{case(nd) => recAssignNames(nd,parser)}.toSet.toList
+      if (names.size != 1)
+        throw new IllegalStateException("Unable to assign the name for node with children " + names.mkString(","))
+      node.name = names(0)
+      val edge = parser.lookupTos(names(0))
+      return edge.from
+    }
+  }
+
+  /**
+    * check that our nodes are assigned consistent node identities between the parsimony and known annotations
+    *
+    * @param node the node
+    * @param parser the mix parser
+    */
+  def recCheckNodeConsistency(node: RichNode, parser: MixParser): Unit = {
+    // if we have a leaf -- where there are no children -- assign the name
+    if (node.children.size == 0 && node.eventString.isDefined) {
+      val differences = node.eventString.get.zip(node.parsimonyEvents).map{case(evt1,evt2) => if (evt1 == evt2) 0 else 1}.sum
+      if (differences > 0) {
+        println("FAIL " + node.eventString.get.mkString(",") + " - " + node.parsimonyEvents.mkString(","))
+      }
+    } else {
+      node.children.map{case(nd) => recCheckNodeConsistency(nd,parser)}.toSet.toList
+    }
   }
 
 

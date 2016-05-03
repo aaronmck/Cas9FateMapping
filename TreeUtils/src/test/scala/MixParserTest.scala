@@ -28,11 +28,11 @@ class MixParserTest extends FlatSpec with Matchers {
   }
 
   "MixParser" should "find the first node correctly" in {
-    treeGenotypes(0).name should be ("root")
+    treeGenotypes(0).from should be ("root")
 
   }
   "MixParser" should "find the last node correctly" in {
-    treeGenotypes(treeGenotypes.size - 1).name should be ("21")
+    treeGenotypes(treeGenotypes.size - 1).from should be ("21")
 
   }
 
