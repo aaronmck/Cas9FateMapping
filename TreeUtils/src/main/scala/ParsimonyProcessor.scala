@@ -1,6 +1,6 @@
 package main.scala
 
-import java.io.File
+import java.io.{PrintWriter, File}
 
 import beast.evolution.tree.Node
 import beast.util.TreeParser
@@ -9,9 +9,15 @@ import scala.io.Source
 
 /**
   * given all the parts we need to make a rich JSON version
-  * of a parsimony tree from the MIX program
+  * of a parsimony tree from the MIX program, make the enhanced tree
+  * and then collapse out parsimony nodes that are
   */
-class ParsimonyProcessor(mixTrees: File, mixOutput: File, annotations: File, sampleToClade: File, eventsToNumbers: File) {
+class ParsimonyProcessor(mixTrees: File,
+                         mixOutput: File,
+                         annotations: File,
+                         sampleToClade: File,
+                         eventsToNumbers: File,
+                         outputFile: File) {
 
   // find the best tree from the mix output
   val bestTreeContainer = BestTree(mixTrees)
@@ -37,6 +43,20 @@ class ParsimonyProcessor(mixTrees: File, mixOutput: File, annotations: File, sam
   // check that the nodes we assigned are consistent
   RichNode.recCheckNodeConsistency(rootNode, mixParser)
 
+  // count nodes before
+  println("nodes " + rootNode.countSubNodes())
+
   // make a collapser of nodes
-  val collapser = new ParsimonyCollapser(rootNode,mixParser)
+  ParsimonyCollapser.checkCollapseNodes(rootNode)
+
+  // the updated numbers
+  println("nodes " + rootNode.countSubNodes())
+
+  // now output the adjusted tree
+  val output = new PrintWriter(outputFile.getAbsolutePath)
+  output.write("[{\n")
+  val jsonString = RichNode.toJSONOutput(rootNode, None)
+  output.write("}]\n")
+  output.close()
+
 }

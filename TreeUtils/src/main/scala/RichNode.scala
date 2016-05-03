@@ -3,8 +3,10 @@ package main.scala
 import beast.evolution.tree.Node
 import beast.util.TreeParser
 import collection.JavaConverters._
+import scala.StringBuilder
 import scala.annotation.tailrec
 import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
 /**
   * This class takes a root BEAST node and creates a descriptive depth-first tree.  This richer node-type can
@@ -15,55 +17,98 @@ case class RichNode(originalNd: Node,
                     parent: Option[RichNode],
                     numberOfTargets: Int = 10) {
 
-  var name = originalNd.getID
-
+  // store the orginal node for later if needed
   val originalNode = originalNd
 
+  // handle some basic annotations about the ndoe
   val myAnnotations = annotations.annotationMapping.get(name)
+
+  var name = originalNd.getID
+  var distToParent = originalNd.getHeight - (if (parent.isDefined) parent.get.originalNd.getHeight else 0)
+  var height = originalNd.getHeight
 
   // setup a store for our organ/taxa proportions, which we'll update with counts from the
   // children nodes
-  val taxaProportions = new mutable.HashMap[String,Double]()
+  var sampleProportions = new mutable.HashMap[String,Double]()
 
   // do we have taxa counts to fill in? internal nodes won't have these values but leaves will
   if (myAnnotations.isDefined) {
-    taxaProportions(myAnnotations.get.taxa) = myAnnotations.get.proportion
+    sampleProportions(myAnnotations.get.sample) = myAnnotations.get.proportion
   }
 
   // explicitly pull out our event string
   val eventString: Option[Array[String]] = if (myAnnotations.isDefined) Some(myAnnotations.get.event.split(annotations.eventSeperator)) else None
 
-  // now store each of our children
-  var children = Array[RichNode]()
-
-  // store the events on each child branch we see
-  var childrenEvents = Array[String]()
+  // our parsimony events
   val parsimonyEvents = Array.fill(numberOfTargets)("NONE")
 
+  // now store each of our children and store the events on each child branch we see
+  var children = Array[RichNode]()
+  var childrenEvents = Array[String]()
+
   originalNd.getChildren.asScala.foreach{nd => {
-    val newChild = RichNode(nd, annotations, Some(this))
-
-    // get the aggregate children events
-    newChild.eventString.foreach(mp => childrenEvents :+= mp.mkString(annotations.eventSeperator))
-    newChild.childrenEvents.foreach{mp => childrenEvents :+= mp}
-
-    // add to our existing taxa proportions
-    newChild.taxaProportions.foreach{
-      case(taxa,proportion) => taxaProportions(taxa) = taxaProportions.getOrElse(taxa,0.0) + proportion
-    }
-
-    // finally add our child to the array of children
-    children :+= newChild
+    children :+= RichNode(nd, annotations, Some(this))
   }}
 
-  def isCollapsible(): Option[Tuple3[String,Int,RichNode]] = {
-    if (childrenEvents.size > 1) {
-      if (childrenEvents.toSet.size == 1) {
-        return Some(new Tuple3[String,Int,RichNode](childrenEvents.toSet.mkString(","),childrenEvents.size,this))
+
+    // ******************************************************************************************************
+  // our member methods
+  // ******************************************************************************************************
+
+  // when we change children, we have to change annotations
+  def resetChildrenAnnotations(): Unit = {
+    childrenEvents = Array[String]()
+    sampleProportions = new mutable.HashMap[String,Double]()
+
+    children.foreach{newChild => {
+      // get the aggregate children events
+      newChild.eventString.foreach(mp => childrenEvents :+= mp.mkString(annotations.eventSeperator))
+      newChild.childrenEvents.foreach{mp => childrenEvents :+= mp}
+
+      // add to our existing taxa proportions
+      newChild.sampleProportions.foreach{
+        case(sample,proportion) => sampleProportions(sample) = sampleProportions.getOrElse(sample,0.0) + proportion
       }
-    }
-    return None
+
+    }}
   }
+
+  /**
+    * find the shared edits in nodes underneath this node
+    *
+    * @return the string of edits in common in our children, if nothing is shared we use '*'
+    */
+  def sharedEdits(): Array[String] = {
+    val storage = Array.fill[mutable.HashSet[String]](numberOfTargets)(mutable.HashSet[String]())
+    childrenEvents.foreach{event =>
+      event.split(annotations.eventSeperator).zipWithIndex.foreach{case(edit,index) => storage(index) += edit}
+    }
+    storage.map{st => if (st.size ==1) st.iterator.next else "*"}
+  }
+
+  // figure out the shared events
+  def parsimonyGenotypeDistance(otherNode: RichNode): Int = {
+    parsimonyEvents.zip(otherNode.parsimonyEvents).map{case(evt1,evt2) => if (evt1 == evt2) 0 else 1}.sum
+  }
+
+  // are we wild-type or not?
+  def getConsistency(): String = {
+    if (this.parsimonyEvents.map{mp => if (mp == "NONE") 0 else 1}.sum == 0)
+      return "WT"
+    return "NOTWT"
+  }
+
+  // some recursive counting functions
+  def countSubNodes(): Int = 1 + children.map{chd => chd.countSubNodes()}.sum
+  def countSubUMIs(): Int = {
+    val myCount = if (myAnnotations.isDefined) myAnnotations.get.count else 0
+    myCount + children.map{chd => chd.countSubUMIs()}.sum
+  }
+  def countSubProportions(): Double = {
+    val myCount = if (myAnnotations.isDefined) myAnnotations.get.proportion else 0.0
+    myCount + children.map{chd => chd.countSubUMIs()}.sum
+  }
+
 }
 
 /**
@@ -88,8 +133,10 @@ object RichNode {
   }
 
   /**
-    * recursively walk down the tree assigning genotypes to each of the progeny nodes as we go
- *
+    * recursively walk down the tree assigning genotypes to each of the progeny nodes as we go.  We have to do
+    * this as the parsimony output is recursive; they define each nodes identity in terms of it's parents
+    * genotype with edit's overlaid
+    *
     * @param parent the parent of this node
     * @param child this node, the child
     * @param parser the parser which contains all of the info about genotypes, etc
@@ -119,6 +166,16 @@ object RichNode {
     child.children.foreach{newChild => recAssignGentoypes(child,newChild,parser)}
   }
 
+  /**
+    * our internal names come off the tree without names, even though the genotypes are assigned a name.  What we have
+    * to do here is traverse to the leaves, which do have names, and walk backwards assigning parent names from known
+    * leaf child->parent output
+    *
+    * @param node the node to assign a name to
+    * @param parser the mix output parser with all of the parent and child relationships
+    * @return the string of the top node (lazy, this is used to recursively fill in names on the way
+    *         back up)
+    */
   def recAssignNames(node: RichNode, parser: MixParser): String = {
     // if we have a leaf -- where there are no children -- assign the name
     if (node.children.size == 0) {
@@ -152,5 +209,36 @@ object RichNode {
     }
   }
 
+  def toJSONOutput(node: RichNode, parent: Option[String], noParentName: String = "null"): String = {
+    val outputString = new ArrayBuffer[String]()
+    outputString += RichNode.toJSON("name",node.name)
+    outputString += RichNode.toJSON("parent",parent.getOrElse(noParentName))
+    outputString += RichNode.toJSON("length",node.distToParent)
+    outputString += RichNode.toJSON("rootDist",node.height)
+    outputString += RichNode.toJSON("cladeTotal",node.countSubNodes())
+    outputString += RichNode.toJSON("totatSubNodes",node.countSubProportions())
+    outputString += RichNode.toJSON("color",
+      if (node.annotations.cladeMapping contains node.name) node.annotations.cladeMapping(node.name).color else "black")
+    outputString += RichNode.toJSON("sample",
+      if (node.myAnnotations.isDefined) node.myAnnotations.get.sample else "black")
+    outputString += RichNode.toJSON("event",node.parsimonyEvents.mkString(node.annotations.eventSeperator))
 
+    outputString += RichNode.toJSON("commonEvent",node.sharedEdits)
+    outputString += "\"organProportions\": { \n"
+    node.sampleProportions.foreach{case(sample,prop) =>
+      outputString += RichNode.toJSON(sample,prop)
+    }
+    outputString += "},\n\"children\": [{\n"
+    outputString += node.children.map{child => RichNode.toJSONOutput(child,Some(node.name))}.mkString("},\n{\n")
+    outputString += "}],\n"
+    outputString += RichNode.toJSON("consistency",node.getConsistency,terminator = "")
+  }
+
+
+  def toJSON(name: String, simple: Object, terminator: String = ","): String = simple match {
+    case String => "\"" + name + "\" : \"" + simple + "\"" + terminator + "\n"
+    case Int => "\"" + name + "\" : " + simple + terminator + "\n"
+    case Double => "\"" + name + "\" : " + simple + terminator + "\n"
+    case _ =>  "\"" + name + "\" : \"" + simple + "\"" + terminator + "\n"
+  }
 }
