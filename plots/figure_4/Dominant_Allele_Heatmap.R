@@ -1,12 +1,23 @@
+# ---------------
 # load libraries
-library(colorspace)
+# ---------------
+
+library(RColorBrewer)
+library(clusterSim)
 library(gplots)
+
+
+# ---------------
+# load data
+# ---------------
 
 # point to the  directory that hosts the .allReadCounts files
 # setwd("Directory Name")
+setwd("C:/Users/James/Documents/Postdoc Work/Lineage Tracing/Clades/2ndReAlignments")
 setwd("C:/Users/James/Documents/Postdoc Work/Lineage Tracing/Clades/04012016_alignments")
 
 # set fish ID number
+fish <- "7B"
 fish <- "17"
 
 # load .allReadCounts files
@@ -31,25 +42,28 @@ all.list <- lapply(all.list, function(x) {
   x[grep("UNKNOWN", x$event, invert=TRUE),]
 })
 
+
 # ---------------
-# remove blood HMIDs from all organs
+# remove blood alleles from all organs
 # ---------------
 
-# make a grep-compatible vector of all the blood HMIDs (deal with the '+' character)
+# make a grep-compatible vector of all the blood alleles (deal with the '+' character)
 blood.hmids <- gsub("\\+", "\\\\+", blood$event)
 
-# remove the top blood alleles
+# remove the top blood alleles (default is 5)
 num.alleles <- 5
 blood.hmids.top <- paste(blood.hmids[1:num.alleles], collapse="|")
 all.list.noblood <- lapply(all.list, function(x) {
   x[grep(blood.hmids.top, x$event, invert=TRUE),]
 })
 
+
 # ---------------
 # shorten the list to remove blood data frame
 # ---------------
 
 all.list.noblood <- all.list.noblood[2:11]
+
 
 # ---------------
 # fix the proportions so that sum of proportions = 1 again, so that we can find top dominant alleles
@@ -67,15 +81,18 @@ all.list.noblood.fixedprop <- lapply(all.list.noblood, function(this.organ){
 all.list.noblood <- Map(cbind, all.list.noblood, all.list.noblood.fixedprop)
 for (x in 1:10){names(all.list.noblood[[x]])[5] <- "newprop"} # fix funky column name
 
-# confirm that proportions now sum correctly
+# confirm that new proportions now sum correctly
 unlist(lapply(all.list.noblood, function(x){sum(x$prop)}))    # old proportions
 unlist(lapply(all.list.noblood, function(x){sum(x$newprop)})) # new proportions
+
 
 # ---------------
 # subset for dominant alleles where abundance > proportion threshold 
 # ---------------
 
 # first, figure out how many elements per organ to include
+# using a threshold for what is a top/dominant allele, default is 5%
+
 prop.threshold <- 0.05
 number.elements <- unlist(lapply(all.list.noblood, function(x){sum(x[1:nrow(x),]$newprop > prop.threshold)}))
 
@@ -84,7 +101,8 @@ number.elements <- unlist(lapply(all.list.noblood, function(x){sum(x[1:nrow(x),]
 # sorry this is a bunch of nested for loops *cringe* - note # comments for explanation
 # it works, but I should switch to apply() at some point for clarity
 
-top.alleles <- c(heartchunk=NA,heartdis=NA,heartgfpm=NA,heartgfpp=NA,uppergi=NA,intestine=NA,gills=NA,brain=NA,eye1=NA,eye2=NA)
+top.alleles <- c(heartchunk=NA,heartdis=NA,heartgfpm=NA,heartgfpp=NA,uppergi=NA,
+                 intestine=NA,gills=NA,brain=NA,eye1=NA,eye2=NA)
 top.alleles.events <- c(pattern=NA)
 
 for (this.organ in 1:10){                                         # for every organ,
@@ -99,29 +117,42 @@ for (this.organ in 1:10){                                         # for every or
     top.alleles.events <- c(top.alleles.events, pattern)
   }
 }
+top.alleles <- top.alleles[-1,] # remove top row of NAs
 
-# flip vertically for plotting purposes
-top.alleles.flip <- top.alleles[order(nrow(top.alleles):1),]
-
-# ---------------
-# set colors manually using colorspace palette, with parameters listed in comment
-# ---------------
-
-pal <- choose_palette() # set h1=10, C1=100, C2=0, L1=20, P1 = 2.7
-cols2 <- rev(pal(1000))
 
 # ---------------
-# make a nice heatmap with legend, using colors defined above
+# set colors using RColorBrewer
 # ---------------
 
-heatmap.2(top.alleles.flip, Rowv=FALSE, Colv="Rowv",dendrogram="none", trace="none",
-          col = cols2, 
-          scale="row",density.info="none")
+cols <- colorRampPalette(brewer.pal(9,"Reds"))(1000)
+
 
 # ---------------
-# output a cleaner version of top.alleles for browsing
+# linear scale each allele to normalize for abundance differences between alleles
 # ---------------
 
-top.alleles.x <- cbind(name=top.alleles.events, as.data.frame(top.alleles))
-top.alleles.x <- top.alleles.x[-1,] # get rid of first row
-write.csv(top.alleles.x, file="top.alleles.new.csv")
+# normalize with type n8, x/max, so every row gets set to max of 1
+top.alleles.scaled <- data.Normalization(top.alleles,type="n8",normalization="row")
+
+
+# ---------------
+# make a nice heatmap with key, using colors defined above
+# ---------------
+
+names <- c("piece of heart","DHCs","NCs","cardiomyocytes","intestinal bulb","post. intestine","gills","brain","left eye","right eye")
+heatmap.2(t(top.alleles.scaled), col = cols, labRow = names, 
+          Rowv=FALSE, Colv="Rowv",
+          dendrogram="none", trace="none",
+          margins = c(8,8), 
+          key.title="", keysize=1.0, 
+          key.xlab="scaled proportion",density.info="none",
+          scale="none",
+          lmat=rbind(3:4,2:1),lwid=c(1,4))
+
+
+# ---------------
+# output a cleaner version of top.alleles for browsing 
+# ---------------
+
+top.alleles.x <- cbind(name=top.alleles.events[-1], as.data.frame(top.alleles))
+write.csv(top.alleles.x, file="dominant.alleles.csv")
