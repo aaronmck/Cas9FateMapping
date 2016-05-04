@@ -60,15 +60,18 @@ class RankedReadContainer(umi: String, maxSize: Int) {
   }
 }
 
-// a case class container for pairs of reads -- we use this to sort by quality score
+// a case class container for pairs of reads -- we use this to sort by length, given that reads are generally quality trimmed
 case class SortedReads(read1: SequencingRead, read2: SequencingRead) extends Ordered[SortedReads] {
+
   val totalAverageQual = (read1.averageQual() * read1.length + read2.averageQual() * read2.length ) / (read1.length + read2.length).toDouble
+  val totalAverageLength = (read1.length + read2.length ) / (2.0)
+
   implicitly[Ordering[Tuple2[Int, Int]]].compare((1,2), (2,3))
 
   // compare the events in reverse order -- we want to drop sorted reads in anti qual order
   def compare(that: SortedReads): Int =
-    if (this.totalAverageQual == that.totalAverageQual)
+    if (this.totalAverageLength == that.totalAverageLength)
       this.read1.length - that.read1.length
   else
-      that.totalAverageQual.toInt - this.totalAverageQual.toInt
+      that.totalAverageLength.toInt - this.totalAverageLength.toInt
 }
