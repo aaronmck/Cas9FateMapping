@@ -50,7 +50,7 @@ case class SequencingRead(name: String, bases: String, quals: String, readOrient
   def qualityThresholdRead(windowSize: Int = 5, minWindowQual: Double = 10): SequencingRead = {
     val cutPos = intQuals.toArray.sliding(windowSize).zipWithIndex.map{case(basesInWindow,index) => {
       if (basesInWindow.sum / windowSize.toDouble < minWindowQual) {
-        println("for read " + bases + " found a window with qual of " +  (basesInWindow.sum / windowSize.toDouble) + " at position " + index)
+        // println("for read " + bases + " found a window with qual of " +  (basesInWindow.sum / windowSize.toDouble) + " at position " + index)
         index
       } else
         0

@@ -52,7 +52,8 @@ case class Config(inputFileReads1: File = new File(UMIProcessing.NOTAREALFILENAM
                   samplename: String = "TEST",
                   minimumUMIReads: Int = 10,
                   minimumSurvivingUMIReads: Int = 6,
-                  umiInForwardRead: Boolean = true)
+                  umiInForwardRead: Boolean = true,
+                  downsampleSize: Int = 40)
 
 
 
@@ -74,6 +75,7 @@ object UMIProcessing extends App {
     opt[File]("primersEachEnd") required() valueName ("<file>") action { (x, c) => c.copy(primersEachEnd = x) } text ("the file containing the amplicon primers requred to be present, one per line, two lines total")
     opt[Int]("minimumUMIReads") action { (x, c) => c.copy(minimumUMIReads = x) } text ("the minimum number of reads that each UMI should have to be considered signal and not noise")
     opt[Int]("minimumSurvivingUMIReads") action { (x, c) => c.copy(minimumSurvivingUMIReads = x) } text ("the minimum number of reads that each UMI should have post filtering")
+    opt[Int]("downsampleSize") action { (x, c) => c.copy(downsampleSize = x) } text ("the maximum number of top-reads we'll store for any UMI")
 
     opt[Int]("umiStart") required() action { (x, c) => c.copy(umiStartPos = x) } text ("the start position, zero based, of our UMIs")
     opt[Int]("umiLength") required() action { (x, c) => c.copy(umiLength = x) } text ("the length of our UMIs")
@@ -119,8 +121,6 @@ object UMIProcessing extends App {
     // our containers for forward and reverse reads
     var umiReads = new mutable.HashMap[String, RankedReadContainer]()
 
-    val downsampleSize = 40
-    val minReads = config.minimumUMIReads
     var tooFewReadsUMI = 0
     var downsampledUMI = 0
     var justRightUMI = 0
@@ -140,6 +140,8 @@ object UMIProcessing extends App {
       // cleanup later
       if (config.umiStartPos >= 0) {
         umi = Some(fGroup(1).slice(config.umiStartPos, config.umiStartPos + config.umiLength))
+        if (readsProcessed < 100)
+          println(config.umiStartPos + "\t" + config.umiLength + "\t" + umi + "\t" + rGroup(1))
 
         val readNoUMI = fGroup(1).slice(config.umiLength, fGroup(1).length)
         val qualNoUMI = fGroup(3).slice(config.umiLength, fGroup(3).length)
@@ -148,7 +150,7 @@ object UMIProcessing extends App {
         val containsReverse = rGroup(1) contains (Utils.reverseComplement(primers(1)))
 
         if (!(umiReads contains umi.get))
-          umiReads(umi.get) = new RankedReadContainer(umi.get, downsampleSize)
+          umiReads(umi.get) = new RankedReadContainer(umi.get, config.downsampleSize)
 
         val fwd = SequencingRead(fGroup(0), readNoUMI, qualNoUMI, ForwardReadOrientation, umi.get)
         val rev = SequencingRead(rGroup(0), rGroup(1), rGroup(3), ReverseReadOrientation, umi.get)
@@ -167,7 +169,7 @@ object UMIProcessing extends App {
         val containsReverse = rGroup(1) contains (Utils.reverseComplement(primers(1)))
 
         if (!(umiReads contains umi.get))
-          umiReads(umi.get) = new RankedReadContainer(umi.get,downsampleSize)
+          umiReads(umi.get) = new RankedReadContainer(umi.get,config.downsampleSize)
 
         val fwd = SequencingRead(fGroup(0), readNoUMI, qualNoUMI, ForwardReadOrientation, umi.get)
         val rev = SequencingRead(rGroup(0), rGroup(1), rGroup(3), ReverseReadOrientation, umi.get)
@@ -202,7 +204,7 @@ object UMIProcessing extends App {
         outputUMIData.get.write(umi + "\t" + reads.totalReads + "\t" + reads.totalPassedReads + "\t" + reads.noPrimer1 + "\t" + reads.noPrimer2 + "\n")
 
 
-      if (reads.size > config.minimumUMIReads) {
+      if (reads.size >= config.minimumUMIReads) {
         val (fwdReads, revReads) = reads.toPairedFWDREV()
 
         val res = UMIMerger.mergeTogether(umi,

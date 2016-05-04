@@ -4,6 +4,7 @@ import aligner.{Aligner, MAFFT, AlignmentManager, AlignmentManager$, Alignment}
 import org.scalatest.{Matchers, FlatSpec}
 import utils.CutSites
 
+import scala.collection.mutable
 import scala.main.{ForwardReadOrientation, SequencingRead}
 
 /**
@@ -211,4 +212,20 @@ class AlignmentManagerTest extends FlatSpec with Matchers {
     //println(AlignmentManager.cutSiteEvents("testUMI", ref, fRead, rRead, cutsSiteObj, 10, true)._3.mkString("<->"))
   }
 
+
+  "Alignment manager" should "recover the wild type sequence when there is no event called" in {
+    val fakeReferenceBases1 = Alignment(/*val refPos: Int */ 5, /*refBase: String*/ "AAAAAAAAAA", /*readBase: String*/ "----------", /*cigarCharacter: String*/ "M")
+    val fakeReferenceBases2 = Alignment(/*val refPos: Int */ 5, /*refBase: String*/ "AAAAAAAAAA", /*readBase: String*/ "AAAAAAAAAA", /*cigarCharacter: String*/ "M")
+
+    val cutsites = new CutSites()
+    cutsites.cutSites(0) = 10
+    cutsites.startSites(0) = 10
+    cutsites.fullSites :+= ("TestRef", 5, 10)
+    cutsites.windows :+= (5, 10, 15)
+    cutsites.size = 1
+
+    val edits = AlignmentManager.editsToCutSiteCalls(List[List[Alignment]](List[Alignment](fakeReferenceBases1,fakeReferenceBases2)), List[List[String]](List[String]("AAAAAAAAAA")), cutsites)
+    println("-------------------->>>>>>>>")
+    println("-->>" + edits._2.mkString(",") + "<<--" + edits._3.mkString(",") + "<<--")
+  }
 }

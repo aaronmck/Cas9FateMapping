@@ -81,7 +81,7 @@ object AlignmentManager {
       // now we match the ref and read bases to see if we have an indel
       (refBase, readBase) match {
         case ('-', readB) if !inRef => {
-          /* we might be in the situation where we haven't started the real alignment, take the offset */
+          /* the situation where we haven't started the real alignment, the read has aligned off the end of the reference */
         }
         case ('-', readB) if inRef => {
           // insertion
@@ -129,7 +129,7 @@ object AlignmentManager {
    */
   def filterEnds(eventList: List[Alignment], minMatch: Int, debugInfo: Boolean = false, matchingBasePCT: Double = 0.60): List[Alignment] = {
 
-    // first the first and last alignments that have at least X bases matched that aren't Ns
+    // find the first and last alignments that have at least X bases matched that aren't Ns
     var firstIndex = -1
     for (i <- 0 until eventList.size)
       if (firstIndex < 0 && eventList(i).cigarCharacter == "M" &&  // have to be a match
@@ -261,7 +261,7 @@ object AlignmentManager {
    * @param readSequences the read sequences -- we have to choose the right one in the two read case
    * @param cutSites the cutsites over the reference we consider
    * @param debug should we dump a lot of debugging info
-   * @return a tuple3 of: an indicator if there was a collision between edits, and an array of events over the target cut sites
+   * @return a tuple3 of: an indicator if there was a collision between edits, an array of events over the target cut sites, and an array of reference sequences
    */
   def editsToCutSiteCalls(readAlignments: List[List[Alignment]],
                           readSequences: List[List[String]],
@@ -283,7 +283,7 @@ object AlignmentManager {
       var referenceSeq = Array[String]()
 
       readAlignments.zipWithIndex.foreach { case(singleReadEdits,readIndex) => {
-        var simgleSampleEvent = Array[String]()
+        var singleSampleEvent = Array[String]()
         singleReadEdits.foreach { edit => {
 
           referenceSeq :+= readSequences(readIndex)(cutSiteIndex)
@@ -295,14 +295,14 @@ object AlignmentManager {
             if (!(nonWildType contains readSequences(readIndex)(cutSiteIndex)))
               nonWildType :+= readSequences(readIndex)(cutSiteIndex)
 
-            simgleSampleEvent :+= edit.toEditString
+            singleSampleEvent :+= edit.toEditString
 
           } else if (edit.cigarCharacter == "M" && span(edit.refPos, edit.refPos + edit.refBase.length, start, end)) {
             cigarMatchOverlapsEdit = true
           }
         }}
-        if (simgleSampleEvent.size > 0 && !(candidates contains simgleSampleEvent.mkString("&")))
-          candidates :+= simgleSampleEvent.mkString("&")
+        if (singleSampleEvent.size > 0 && !(candidates contains singleSampleEvent.mkString("&")))
+          candidates :+= singleSampleEvent.mkString("&")
         }
       }
 
@@ -312,7 +312,17 @@ object AlignmentManager {
 
       // create target strings
       nonWildType.size match {
-        case 0 => retTargetSeq :+= (if (referenceSeq.size > 0) referenceSeq(0) else "BLANK")
+        case 0 => retTargetSeq :+= {
+          referenceSeq.size match {
+            case 0 => "BLANK"
+            case 1 => referenceSeq(0)
+            case _ => {
+              // this is an edge case we should do better on: both reads 'overlap', we choose the one with the reference sequence
+              val nonWTbases = referenceSeq.map{sq => sq.map{base => if (base == '-') 0 else 1}.sum}.toArray
+              referenceSeq(nonWTbases.zipWithIndex.maxBy(_._1)._2)
+            }
+          }
+        }
         case 1 => retTargetSeq :+= nonWildType(0)
         case _ => retTargetSeq :+= nonWildType.mkString(",")
       }
