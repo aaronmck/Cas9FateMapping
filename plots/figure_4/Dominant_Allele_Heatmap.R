@@ -20,6 +20,10 @@ setwd("C:/Users/James/Documents/Postdoc Work/Lineage Tracing/Clades/04012016_ali
 fish <- "7B"
 fish <- "17"
 
+# initialize a couple vectors
+tissues <- c("blood","heartchunk","heartdis","heartgfpm","heartgfpp","uppergi","intestine","gills","brain","eye1","eye2","all")
+results <- data.frame(tissues,count = NA, prop = NA)
+
 # load .allReadCounts files
 brain <- read.delim(paste(fish,"_Brain.allReadCounts.txt", sep=""),stringsAsFactors=F)
 blood <- read.delim(paste(fish,"_Blood.allReadCounts.txt", sep=""),stringsAsFactors=F)
