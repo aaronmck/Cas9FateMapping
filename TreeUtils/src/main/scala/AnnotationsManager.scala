@@ -10,8 +10,14 @@ import scala.io.Source
   * for each node name to a set of annotations.  On request,
   * annotate each node with it's appropriate info
   */
-class AnnotationsManager(annotations: File, sampleToClade: File) {
+class AnnotationsManager(annotations: File, sampleToClade: File, cladeIdentities: Option[File]) {
+  // annotationMapping
   // taxa    sample  count   proportion      event
+  // N0      17_Brain        3501    0.14872557349192864     1D+141_NONE_NONE_1D+220_10D+237_1I+273+T_10D+289_67D+322_67D+322_67D+322
+  //
+  // cladeMapping
+  // sample  clade   color
+  // 17_Blood        Blood   #FF0000
   // store leaf node names to their group and read
   val seperator = "\t"
   val eventSeperator = "_"
@@ -45,11 +51,12 @@ class AnnotationsManager(annotations: File, sampleToClade: File) {
 
   val annotationMapping = new HashMap[String,AnnotationEntry]()
   val cladeMapping = new HashMap[String,CladeEntry]()
+  val sampleTotals = new HashMap[String,Int]()
 
   // map the annotation header
   mappingFile.foreach{line => {
     val sp = line.split(seperator)
-    // println(sp(header("taxa")) + " - " + sp(header("event")))
+    sampleTotals(sp(header("sample"))) = sampleTotals.getOrElse(sp(header("sample")),0) + sp(header("count")).toInt
     annotationMapping(sp(header("taxa"))) = AnnotationEntry(sp(header("taxa")),
       sp(header("sample")),
       sp(header("count")).toInt,
@@ -60,10 +67,49 @@ class AnnotationsManager(annotations: File, sampleToClade: File) {
   // now get the mapping for sample to clade and color
   cladeFile.foreach{line => {
     val sp = line.split(seperator)
-    cladeMapping(sp(header("sample"))) = CladeEntry(sp(cladeHeader("sample")),
+    println("cladeMapping " + cladeHeader("sample") + " + " + sp(cladeHeader("sample")))
+    cladeMapping(sp(cladeHeader("sample"))) = CladeEntry(sp(cladeHeader("sample")),
       sp(cladeHeader("clade")),
       sp(cladeHeader("color")))
   }}
+
+  var eventDefinitionsToColors : Option[HashMap[String,Array[String]]] = None
+
+  // *******************
+  // deal with the optional clade assignment color matching
+  if (cladeIdentities.isDefined) {
+    val inputEvtDefs = Source.fromFile(cladeIdentities.get).getLines()
+    val evtDefHeader = inputEvtDefs.next()
+    if (evtDefHeader != "clade_name\tclade_event\tclade_color")
+      throw new IllegalArgumentException("Unable to find the correct header on the clade identities file: we require clade_name<tab>clade_event<tab>clade_color")
+
+    // now process the events definitions into colors
+    eventDefinitionsToColors = Some(new HashMap[String,Array[String]]())
+
+    inputEvtDefs.foreach{line => {
+      val sp = line.split("\t")
+      (eventDefinitionsToColors.get)(sp(2)) = sp(1).split(eventSeperator)
+    }}
+  }
+
+  /**
+    * lookup the clade color for this event; if there isn't one return black our default
+    *
+    * @param node the event node
+    * @return a color string
+    */
+  def setNodeColor(node: RichNode): Tuple2[String,String] = {
+    if (!eventDefinitionsToColors.isDefined)
+      return ("nodecolor","black")
+    eventDefinitionsToColors.get.foreach{case(color,arrayOfEvents) => {
+      val containCount = arrayOfEvents.map{case(chkEvt) => if (node.parsimonyEvents contains chkEvt) 1 else 0}.sum
+      if (containCount == arrayOfEvents.size) {
+        return ("nodecolor",color)
+      }
+    }}
+    return ("nodecolor","black")
+  }
+
 }
 
 // some containers

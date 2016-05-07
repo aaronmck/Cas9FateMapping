@@ -17,7 +17,11 @@ class ParsimonyProcessor(mixTrees: File,
                          annotations: File,
                          sampleToClade: File,
                          eventsToNumbers: File,
+                         eventColorsFile: Option[File],
                          outputFile: File) {
+
+  // TODO: add a normalization process like FigTree for proportional scaling
+  // TODO: check proportions
 
   // find the best tree from the mix output
   val bestTreeContainer = BestTree(mixTrees)
@@ -29,7 +33,7 @@ class ParsimonyProcessor(mixTrees: File,
   val treeParser = new TreeParser(bestTreeContainer.bestTreeString, false, true, true, 1)
 
   // load up any annotations we have
-  val annotationMapping = new AnnotationsManager(annotations, sampleToClade)
+  val annotationMapping = new AnnotationsManager(annotations, sampleToClade, eventColorsFile)
 
   // traverse the nodes and add names to any internal nodes without names
   val rootNode = RichNode(treeParser.getRoot,annotationMapping, None)
@@ -44,18 +48,30 @@ class ParsimonyProcessor(mixTrees: File,
   RichNode.recCheckNodeConsistency(rootNode, mixParser)
 
   // count nodes before
-  println("nodes " + rootNode.countSubNodes())
+  println("before collapsing nodes " + rootNode.countSubNodes())
 
-  // make a collapser of nodes
-  ParsimonyCollapser.checkCollapseNodes(rootNode)
+  // collapse nodes from the root
+  ParsimonyCollapser.collapseNodes(rootNode)
+
+  // sort the nodes
+  RichNode.reorderChildrenByAlleleString(rootNode)
+
+  // add gray lines to branches where we're going to two
+  RichNode.assignBranchColors(rootNode)
 
   // the updated numbers
-  println("nodes " + rootNode.countSubNodes())
+  println("after collapsing nodes " + rootNode.countSubNodes())
+
+  // assign the colors to the nodes
+  RichNode.applyFunction(rootNode,annotationMapping.setNodeColor)
+
+  // get an updated height to flip the tree around
+  val maxHeight = RichNode.maxHeight(rootNode)
 
   // now output the adjusted tree
   val output = new PrintWriter(outputFile.getAbsolutePath)
   output.write("[{\n")
-  val jsonString = RichNode.toJSONOutput(rootNode, None)
+  output.write(RichNode.toJSONOutput(rootNode, None,1.0))
   output.write("}]\n")
   output.close()
 

@@ -43,6 +43,7 @@ case class TreeConfig(inputTree: File = new File(Main.NOTAREALFILENAME),
                       inputAnnotations: File = new File(Main.NOTAREALFILENAME),
                       inputSampleToClade: File = new File(Main.NOTAREALFILENAME),
                       inputEventsToNumbers: File = new File(Main.NOTAREALFILENAME),
+                      eventsToColors: File = new File(Main.NOTAREALFILENAME),
                       outputTree: File = new File(Main.NOTAREALFILENAME))
 
 
@@ -61,6 +62,7 @@ object Main extends App {
     opt[File]("inputAnnotations") required() valueName ("<file>") action { (x, c) => c.copy(inputAnnotations = x) } text ("first read file ")
     opt[File]("inputSampleToClade") required() valueName ("<file>") action { (x, c) => c.copy(inputSampleToClade = x) } text ("first read file ")
     opt[File]("inputEventsToNumbers") required() valueName ("<file>") action { (x, c) => c.copy(inputEventsToNumbers = x) } text ("first read file ")
+    opt[File]("eventsToColors") valueName ("<file>") action { (x, c) => c.copy(eventsToColors = x) } text ("first read file ")
     opt[File]("outputTree") required() valueName ("<file>") action { (x, c) => c.copy(outputTree = x) } text ("second reads file")
 
     // some general command-line setup stuff
@@ -71,7 +73,13 @@ object Main extends App {
   // *********************************** Run *******************************************************
   parser.parse(args, TreeConfig()) map { config => {
     // mixTrees: File, mixOutput: File, annotations: File, sampleToClade: File, eventsToNumbers: String
-    val parser = new ParsimonyProcessor(config.inputTree, config.inputGenotypes, config.inputAnnotations, config.inputSampleToClade, config.inputEventsToNumbers)
+    val parser = new ParsimonyProcessor(config.inputTree,
+      config.inputGenotypes,
+      config.inputAnnotations,
+      config.inputSampleToClade,
+      config.inputEventsToNumbers,
+      if (config.eventsToColors.getAbsolutePath contains NOTAREALFILENAME) None else Some(config.eventsToColors),
+      config.outputTree)
   }} getOrElse {
     println("Unable to parse the command line arguments you passed in, please check that your parameters are correct")
   }
