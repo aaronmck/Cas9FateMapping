@@ -6,8 +6,10 @@
 //
 // ----------------------------------------------------------------------
 
-// the total width of the plots on the right and left sides
+// the file to load
+occurance_file = "Figure5B_Clades.allReadCounts"
 
+// the mapping of event numbers to event type
 var numberToType = {"0": "match", "1": "deletion", "2": "insertion"};
 
 // sizes for various bounding boxes
@@ -70,8 +72,6 @@ var svgHeatRight = d3.select("#heatmapRight")
 
 var histogram_top_data = ""
 var cut_site_data = ""
-
-occurance_file = "Figure5B_Clades.allReadCounts"
 
 function changeHistogram() {
     d3.select("#heatmapRight").select("svg").remove();
@@ -139,6 +139,17 @@ function redrawHistogram() {
    
     var wt_colors = ['#000000', '#00FF00', '#555555', '#117202', '#333333'];
 
+     svgHeatRight.append("g")
+        .attr("class", "x axis")
+        .attr("transform", "translate(0," + 100 + ")")
+        .call(xAxis)
+        .selectAll("text")
+        .style("text-anchor", "end")
+        .attr("dx", "-.8em")
+        .attr("dy", ".15em")
+        .attr("transform", "rotate(90)")
+        .attr("y", 1)
+    
     mutbox2.selectAll(".bar")
         .data(local_occur_data)
         .enter().append("rect")
@@ -146,6 +157,7 @@ function redrawHistogram() {
         .attr("x", function (d) {
             return 3;
         })
+        .attr("transform", "translate(0," + 100 + ")")
         .attr("width", function (d) {
             return Math.max(0.5,prescale(+d.count));
         })
@@ -162,16 +174,7 @@ function redrawHistogram() {
             return wt_colors[2]; // +d.WT + 2];
         });
 
-    svgHeatRight.append("g")
-        .attr("class", "x axis")
-        .attr("transform", "translate(0," + 100 + ")")
-        .call(xAxis)
-        .selectAll("text")
-        .style("text-anchor", "end")
-        .attr("dx", "-.8em")
-        .attr("dy", ".15em")
-        .attr("transform", "rotate(90)")
-        .attr("y", 1)
+   
 
     // this is really hacky, but I can't seem to programmaticly slim down the number of ticks on the x axis in log mode, so do it by hand
     if (xScaleIsLog) {

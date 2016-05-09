@@ -6,17 +6,19 @@
 //
 // ----------------------------------------------------------------------
 
-// the file to load
-occurance_file = "Figure5B_Clades.allReadCounts"
+// the total width of the plots on the right and left sides
 
-// the mapping of event numbers to event type
 var numberToType = {"0": "match", "1": "deletion", "2": "insertion"};
+
+var occurance_file = "Clades.allReadCounts"
+var startPos = 104
+var endPos = 403
 
 // sizes for various bounding boxes
 var global_width = 800;
 var global_height = 100;
 var heat_height = 400;
-var margin_left = 0;
+var margin_left = 80;
 var right_histo_width = 200;
 
 // colors we use for events throughout the plots
@@ -31,7 +33,7 @@ var mutation_values = ["reference", "insertion", "deletion", "mismatch"];
 var maxValue = mutation_values.length;
 
 // state data -- these are a hack to get around the async data loading in D3 -- sorry!
-var xScaleIsLog = false
+var xScaleIsLog = true
 var topScaleIsLog = false
 occurance_data = ""
 read_block_data = ""
@@ -45,8 +47,6 @@ var cropHeightProp = 0.8
 // plot up to this many HMID reads on the plot
 var topHMIDs = 100
 
-// how much we should offset the charts
-var totalOffset = 100
 
 // from http://bl.ocks.org/mbostock/7621155
 var superscript = "⁰¹²³⁴⁵⁶⁷⁸⁹",
@@ -61,7 +61,11 @@ var svgHeat = d3.select("#heatmap").append("svg")
     .attr("width", global_width)
     .attr("height", heat_height)
     .append("g")
-    .attr("transform", "translate(0," + 100 + ")")
+
+var svg = d3.select("#topplot").append("svg")
+    .attr("width", global_width)
+    .attr("height", global_height)
+    .append("g")
     
 var svgHeatRight = d3.select("#heatmapRight")
     .append("svg")
@@ -69,9 +73,205 @@ var svgHeatRight = d3.select("#heatmapRight")
     .attr("height", global_width)
     .append("g")
     
+function logTheTop() {
+    d3.select("#topplot").select("svg").remove();
+    
+    svg = d3.select("#topplot").append("svg")
+	.attr("width", global_width)
+	.attr("height", global_height)
+	.append("g")
+	
+    if (topScaleIsLog) {
+        topScaleIsLog = false
+    } else {
+        topScaleIsLog = true
+    }
+    redrawTheTopHistgram()
+}
 
 var histogram_top_data = ""
 var cut_site_data = ""
+
+function redrawTheTopHistgram() {
+    // make a new data set where we melt down the mutations -- effectively like melt in R
+    var muts = d3.layout.stack()(["deletion", "insertion"].map(function (mutation) {
+        return histogram_top_data.map(function (d) {
+            return {x: parseInt(d.index), y: +d[mutation], type: numberToType[mutation]};
+        });
+    }));
+
+    var maxVal = endPos // d3.max(local_rbd , function (d) {return +d.length})
+    var minVal = startPos // d3.min(local_rbd , function (d) {return +d.position})
+    var xEvents = d3.scale.linear().domain([0,maxVal - minVal]).range([margin_left, global_width]);
+
+    var yMax = Math.max(d3.max(muts[0].map(function (d) {return d.y;})),d3.max(muts[1].map(function (d) {return d.y;})))
+    
+    var yEvents = d3.scale.linear().domain([0, yMax]).range([global_height, 0]);
+    var formatter = d3.format("2.1%");
+    if (yMax < 0.001) {
+	formatter = d3.format("2.2%");
+    }
+
+    var yAxis = d3.svg.axis()
+        .scale(yEvents)
+        .orient("left")
+        .ticks(4)
+        .tickFormat(formatter)
+        .outerTickSize(0);
+
+    var logScaleFactor = 100.0
+    var roundPlaces = 2
+    
+    if (topScaleIsLog) {
+	formatter = d3.format("2");
+
+	if (yMax < 0.01) {
+	    formatter = d3.format("2.1");
+	    logScaleFactor = 1000.0 // yeah our log scaling is a bit ugly
+	    roundPlaces = 4
+	}
+	if (yMax < 0.001) {
+	    formatter = d3.format("2.2");
+	    logScaleFactor = 10000.0 // yeah our log scaling is a bit ugly
+	    roundPlaces = 6
+	}
+	
+	yEvents = d3.scale.log().domain([1, yMax * logScaleFactor]).range([global_height, 0]);
+	
+	yAxis = d3.svg.axis()
+            .scale(yEvents)
+            .orient("left")
+            .ticks(3)
+            .tickFormat(formatter)
+            .outerTickSize(0);
+    } else {
+	if (yMax < 0.01) {
+	    roundPlaces = 4
+	}
+	if (yMax < 0.001) {
+	    roundPlaces = 6
+	}
+    }
+
+    var xAxis = d3.svg.axis()
+        .scale(xEvents)
+        .orient("bottom");
+
+    // ************************************************************************************************************
+    // load in the cutsite data and draw that onto the plot -- this is nested to use the x and y axis object from above
+    // ************************************************************************************************************
+    
+    var minCutSite = d3.min(cut_site_data, function(d) {
+	return(+d.position);
+    }) - 19;
+    
+    svg.selectAll('.target')
+        .data(cut_site_data)
+        .enter().append('rect')
+        .attr('class', 'target')
+        .attr('x', function (d) {
+            return xEvents(+d.position - minCutSite);
+        })
+        .attr('y', 0)
+        .attr('width', function (d) {
+            return xEvents(20) - xEvents(0)
+        })
+        .attr('height', global_height)
+        .attr("fill-opacity", .1)
+        .attr("stroke", "#888888")
+    
+    svg.selectAll('.cutsites')
+        .data(cut_site_data)
+        .enter().append('rect')
+        .attr('class', 'cutsites')
+        .attr('x', function (d) {
+            return xEvents((+d.cutPos + 4) - minCutSite);
+        })
+        .attr('y', 0)
+        .attr('width', function (d) {
+            return xEvents(4) - xEvents(0)
+        })
+        .attr('height', global_height)
+        .attr("fill-opacity", .6)
+        .attr("fill", "gray")
+	.attr("stroke", "#888888")
+
+    var mutbox = svg.selectAll(".bar")
+        .data(muts)
+        .enter().append("svg:g")
+        .attr("class", "cause")
+        .style("fill", function (d, i) {
+            return heatmap_colors[i + 1];
+        })
+        .style("stroke", function (d, i) {
+            return d3.rgb(heatmap_colors[i + 1]);
+        });
+
+    var line = d3.svg.line()
+        .x(function (d) {
+            return xEvents(d.x);
+        })
+        .y(function (d) {
+            return yEvents(d.y);
+        });
+
+    var lineLog = d3.svg.line()
+        .x(function (d) {
+            return xEvents(d.x);
+        })
+        .y(function (d) {
+            return yEvents(Math.max(1,logScaleFactor * d.y));
+        });
+
+    if (topScaleIsLog) {
+	svg.append("svg:path").attr("d", lineLog(muts[0])).attr("class", "line").attr("fill", "none").attr("stroke", heatmap_colors[1]).attr("stroke-width", "3px")
+	svg.append("svg:path").attr("d", lineLog(muts[1])).attr("class", "line").attr("fill", "none").attr("stroke", heatmap_colors[2]).attr("stroke-width", "3px")
+    } else {
+	svg.append("svg:path").attr("d", line(muts[0])).attr("class", "line").attr("fill", "none").attr("stroke", heatmap_colors[1]).attr("stroke-width", "3px")
+	svg.append("svg:path").attr("d", line(muts[1])).attr("class", "line").attr("fill", "none").attr("stroke", heatmap_colors[2]).attr("stroke-width", "3px")	
+    }
+    
+    svg.append("g")
+        .attr("class", "y axis")
+        .attr("transform", "translate(" + (xEvents(0) - 5) + ",0)")
+        .attr("anchor", "right")
+        .call(yAxis)
+
+    var legendText = "Editing (%)"
+
+    //var zero = d3.round(
+    // if we're logged we need to adjust the legend text and manualy remove a bunch of labels /ticks from the y axis
+    if (topScaleIsLog) {
+	legendText = "Editing percent (log)"
+
+	// god damn do log transform axes in D3 suck -- here's what we do: filter down to 3 or 4 tick points.  Otherwise it's too crowded,
+	// or too sparse.  
+	var fullSelection = svg.selectAll(".tick")
+	var everyNth = Math.ceil(fullSelection.size()/3)
+	
+        fullSelection.each(function (d, i) {
+            if (i % everyNth != 0 && i != fullSelection.size() - 1) {
+                this.remove();
+            } else {
+                var valueToConvert = +this.textContent / (logScaleFactor / 100.0) 
+                this.children[1].textContent = d3.round(valueToConvert,roundPlaces) + "%"
+            }
+        });
+    }
+    
+    //Add the text legend
+    svg.append("text")
+        .attr("x", function (d) {
+            return -1 * global_height; // due to the transform
+        })
+        .attr("y", function (d) {
+            return 0;
+        })
+        .attr("text-anchor", "left")
+        .style("font-size", "25px")
+        .text(legendText)
+        .attr("transform", "rotate(-90)");
+}; 
 
 function changeHistogram() {
     d3.select("#heatmapRight").select("svg").remove();
@@ -95,7 +295,7 @@ function changeHistogram() {
 // ************************************************************************************************************
 function redrawHistogram() {
 
-    var local_occur_data = occurance_data.filter(function(d){ return +d.array <= topHMIDs; })
+    var local_occur_data = occurance_data.filter(function(d){ return +d.array < topHMIDs; })
 
     
     // find the maximum number of reads
@@ -139,9 +339,32 @@ function redrawHistogram() {
    
     var wt_colors = ['#000000', '#00FF00', '#555555', '#117202', '#333333'];
 
-     svgHeatRight.append("g")
+    mutbox2.selectAll(".bar")
+        .data(local_occur_data)
+        .enter().append("rect")
+        .attr("class", "bar")
+        .attr("x", function (d) {
+            return 0;
+        })
+        .attr("width", function (d) {
+            return Math.max(0.5,prescale(+d.count));
+        })
+        .attr("y", function (d) {
+            return global_height + yScale(+d.array) + ((1.0 - cropHeightProp) * gridHeight);
+        })
+        .attr("height", function (d) {
+            return gridHeight * cropHeightProp;
+        })
+        .style("fill", function (d, i) {
+            return wt_colors[+d.WT];
+        })
+        .style("stroke", function (d, i) {
+            return wt_colors[+d.WT + 2];
+        });
+
+    svgHeatRight.append("g")
         .attr("class", "x axis")
-        .attr("transform", "translate(0," + 100 + ")")
+        .attr("transform", "translate(0," + 85 + ")")
         .call(xAxis)
         .selectAll("text")
         .style("text-anchor", "end")
@@ -149,32 +372,6 @@ function redrawHistogram() {
         .attr("dy", ".15em")
         .attr("transform", "rotate(90)")
         .attr("y", 1)
-    
-    mutbox2.selectAll(".bar")
-        .data(local_occur_data)
-        .enter().append("rect")
-        .attr("class", "bar")
-        .attr("x", function (d) {
-            return 3;
-        })
-        .attr("transform", "translate(0," + 100 + ")")
-        .attr("width", function (d) {
-            return Math.max(0.5,prescale(+d.count));
-        })
-        .attr("y", function (d) {
-            return yScale(+d.array) + ((0.25) * gridHeight);
-        })
-        .attr("height", function (d) {
-            return gridHeight * 0.7;
-        })
-        .style("fill", function (d, i) {
-            return wt_colors[2]; //+d.WT];
-        })
-        .style("stroke", function (d, i) {
-            return wt_colors[2]; // +d.WT + 2];
-        });
-
-   
 
     // this is really hacky, but I can't seem to programmaticly slim down the number of ticks on the x axis in log mode, so do it by hand
     if (xScaleIsLog) {
@@ -203,9 +400,9 @@ function redrawHistogram() {
         })
         .attr("y", function (d) {
             if (xScaleIsLog) {
-                return -30
+                return global_height - 70;
             } else {
-                return -30
+                return global_height - 100;
             }
         })
         .attr("text-anchor", "left")
@@ -222,33 +419,32 @@ d3.tsv(occurance_file, function (error, data) {
     redraw_read_block();
 });
 
-// ************************************************************************************************************
-// read plots -- add a block for each of the high frequency reads we observe
-// ************************************************************************************************************
+
 function redraw_read_block() {
-    var startRegion = 110
-    var endRegion = 416
+    var local_rbd = read_block_data.filter(function(d){ return +d.array < topHMIDs; })
     
-    var local_rbd = read_block_data.map(function(obj, index) {
-	return padWithMatches(hmidToEvents(obj.event, index),startRegion,endRegion, index)
-    })
-    local_rbd = [].concat.apply([], local_rbd);    
-    var readCount = read_block_data.length
-    
+    var readCount = parseInt(d3.max(local_rbd , function (d) {
+        return +d.array;
+    })) + 1;
     var gridHeight = Math.min(maxReadHeight, parseInt(heat_height / readCount));
     var totalHeatHeight = gridHeight * readCount
 
-    var maxVal = endRegion - startRegion // endPos // d3.max(local_rbd , function (d) {return +d.length})
-    //var minVal = startRegion // startPos // d3.min(local_rbd , function (d) {return +d.position})
+    var maxVal = endPos // d3.max(local_rbd , function (d) {return +d.length})
+    var minVal = startPos // d3.min(local_rbd , function (d) {return +d.position})
     
     // the scales and axis for the heatmap data
-    var yScale = d3.scale.linear().domain([0,readCount]).range([0, totalHeatHeight]);
+    var yScale = d3.scale.ordinal().domain(local_rbd.map(function (d) {
+        return +d.array;
+    })).rangeBands([0, totalHeatHeight]);
     
-    var xScale = d3.scale.linear().domain([0,maxVal]).range([margin_left, global_width]);
+    var xScale = d3.scale.linear().domain([minVal,maxVal]).range([margin_left, global_width]);
     var maxXPlot = xScale(maxVal)
 
     var dmt = xScale.domain().length;
     var gridWidth = parseInt((global_width - margin_left) / dmt);
+    var readCount = parseInt(d3.max(local_rbd, function (d) {
+        return +d.array;
+    })) + 1;
     var gridOffset = parseInt(gridWidth + (gridWidth / 2));
     var max = d3.entries(local_rbd ).sort(function (a, b) {
             return d3.descending(+a.value.position, +b.value.position);
@@ -264,23 +460,25 @@ function redraw_read_block() {
         .data(local_rbd )
         .enter().append("svg:rect")
         .attr("x", function (d, i) {
-            return xScale(+d.pos)
+            return xScale(+d.position)
         })
         .attr("y", function (d, i) {
             return yScale(+d.array) + ((1.0 - cropHeightProp) * gridHeight)
         })
         .attr("width", function (d) {
-	    return xScale(+d.len);
+	    if (xScale(+d.position) + xScale(((+d.length) - (+d.position))) > maxXPlot) {
+		return maxXPlot - (xScale(+d.position));
+	    } else {
+		return xScale((+d.length) - (+d.position) + minVal) - xScale(minVal);
+	    }
         })
         .attr("height", function (d) {
             return gridHeight * cropHeightProp;
         })
         .style("fill", function (d) {
-            return heatmap_colors[+d.typ];
+            return heatmap_colors[+d.event];
         })
-	.style("stroke", function (d) {
-            return "gray";
-        })
+
 };
 
 function changeSelection() {
@@ -304,93 +502,4 @@ function changeSelection() {
     
     redraw_read_block();
     redrawHistogram();
-}
-
-
-
-var match = 0
-var insertion = 2
-var deletion = 1
-
-function drawNodes(svgObj, eventArray, d, barLength,size, barHeight) {
-    // scale from the event window to the barlength on the screen
-    var scaleX = d3.scale.linear().range([0,barLength]).domain([0,size])
-    var heatmap_colors = ['#FFFFFF','#CE343F','#2E4D8E','#D49E35'];
-    
-    for (i = 0; i < eventArray.length; i++) {
-	var rectangle = svgObj.append("rect")
-	    .attr('fill', heatmap_colors[eventArray[i].typ] )
-	    .attr('stroke', '#111')
-	    .attr('stroke-width', bar_stroke_width)
-	    .attr("width", barHeight)
-	    .attr("height", function(d) {return scaleX(eventArray[i].len)})
-	    .attr("transform","translate(" + (event_location + scaleX(eventArray[i].pos)) + "," + (d.x + barHeight/2.0) + ") rotate(-90) ");
-    }
-}
-
-
-function padWithMatches(eventObjectArray, start, end, arrayVal) {
-    var resultsArray = [];
-    for (i = 0; i < eventObjectArray.length; i++) {
-        var curEvt = offsetByStart(eventObjectArray[i],start, arrayVal)
-	
-        // we haven't added an event yet, pad to the beginning of the target region with a match
-        if (resultsArray.length == 0) {
-            if (curEvt.pos > 0) { // we've offset by the start, so the beginning is now zero
-                resultsArray.push({typ: match, len: curEvt.pos, pos: 0, array: arrayVal})
-            }
-            resultsArray.push(curEvt)
-        }
-        // we have values in the array, pad matches between events
-        else {
-            if (curEvt.pos > resultsArray[resultsArray.length -1].pos + resultsArray[resultsArray.length -1].len) {
-                resultsArray.push({typ: match, len: curEvt.pos - (resultsArray[resultsArray.length -1].pos + resultsArray[resultsArray.length -1].len), pos: resultsArray[resultsArray.length
-																					  -1].pos + resultsArray[resultsArray.length -1].len, array: arrayVal})
-            }
-            resultsArray.push(curEvt)
-        }
-    }
-    // now pad the end -- if the last event doesn't run all the way to the end pos, add matches
-    if (resultsArray[resultsArray.length - 1].pos < (end - start)) {
-        resultsArray.push({typ: match, len: (end - start)  - (resultsArray[resultsArray.length -1].pos + resultsArray[resultsArray.length -1].len), pos: resultsArray[resultsArray.length -1].
-			   pos + resultsArray[resultsArray.length -1].len, array: arrayVal})
-    }
-    return resultsArray;
-}
-
-function offsetByStart(event,start, arrayVal) {
-    return ({typ: event.typ, len: event.len, pos: event.pos - start, array: arrayVal});
-}
-
-// take an HMID event string and convert to a series of events
-function hmidToEvents(eventString, arrayVal) {
-    var res = eventString.split("_");
-    var tokens = [];
-    for (i = 0; i < res.length; i++) {
-        var subEvents = res[i].split("&")
-
-        for (j = 0; j < subEvents.length; j++)
-            if (subEvents[j] != "NONE") {
-                tokens.push(eventToObject(subEvents[j],arrayVal))
-            }
-    }
-    return tokens;
-}
-
-    // convert a single event string to an object, which looks like
-
-function eventToObject(event, arrayVal) {
-    var tokens = event.split("+");
-    var typeOf = tokens[0].substring(tokens[0].length - 1, tokens[0].length)
-    if (typeOf == "I") {
-        typeOf = insertion
-    } else if (typeOf == "D") {
-        typeOf = deletion
-    } else {
-        typeOf = match
-    }
-
-    var lengthOf = Number(tokens[0].substring(0, tokens[0].length - 1))
-    var position = Number(tokens[1])
-    return {typ: typeOf, len: lengthOf, pos: position, array: arrayVal}
 }

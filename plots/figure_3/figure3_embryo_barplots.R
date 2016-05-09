@@ -7,10 +7,11 @@ library(reshape2)
 dev_colors = c("#F26E12","#0AA600","#0086FF","#515251")
 
 # shape the data down to usable columns and samples
-embryo_uniques = read.delim("/mount/vol10/CRISPR.lineage/nobackup/2016_03_05_Embryos/embryos_sup_table.txt")
+embryo_uniques = read.delim("/mount/vol10/CRISPR.lineage/nobackup/2016_05_04_embryo_rerun/2016_05_04_embryo_rerun_supplement.txt")
 embryo_uniques = embryo_uniques[embryo_uniques$sample != "3d_1b_0.3x" & embryo_uniques$sample != "3d_1b_1x",]
 embryo_uniques = embryo_uniques[,complete.cases(t(embryo_uniques))]
-embryo_uniques = embryo_uniques[embryo_uniques$passHMIDs > 100 & embryo_uniques$uniqueHMIDs > 20,]
+# embryo_uniques = embryo_uniques[embryo_uniques$passHMIDs > 100 & embryo_uniques$uniqueHMIDs > 20,]
+embryo_uniques = embryo_uniques[embryo_uniques$passHMIDs > 150,]
 
 # pull out the rate information
 split_to_rate = function(x) {
@@ -64,14 +65,13 @@ gg = ggplot(embryo_uniques) +
   theme(axis.text.x = element_blank()) +
   theme(axis.text.x = element_text(angle = 90, hjust = 1)) + 
   theme(legend.position="none")
-ggsave(gg,file="~/Desktop/unique_HMIDs_by_embryo.png",width=8,height=1.5)
-ggsave(gg,file="~/Desktop/unique_HMIDs_by_embryo.svg",width=8,height=1.5)
+ggsave(gg,file="~/Desktop/unique_HMIDs_by_embryo.pdf",width=8,height=3)
 
 # now sort by hour, then by unique counts
-embryo_uniques$stage = factor(as.character(embryo_uniques$stage),levels=c("4.3HR","9HR","30HR","72HR"))
-embryo_uniques = embryo_uniques[order(embryo_uniques$stage,embryo_uniques$passHMIDs),]
-embryo_uniques$index = seq(1,nrow(embryo_uniques))
-embryo_uniques$sample = factor(embryo_uniques$sample,levels=embryo_uniques$sample)
+##embryo_uniques$stage = factor(as.character(embryo_uniques$stage),levels=c("4.3HR","9HR","30HR","72HR"))
+#embryo_uniques = embryo_uniques[order(embryo_uniques$stage,embryo_uniques$passHMIDs),]
+#embryo_uniques$index = seq(1,nrow(embryo_uniques))
+#embryo_uniques$sample = factor(embryo_uniques$sample,levels=embryo_uniques$sample)
 
 # plot passing
 gg2 = ggplot(embryo_uniques) + 
@@ -90,15 +90,14 @@ gg2 = ggplot(embryo_uniques) +
   theme(axis.text.x = element_blank()) +
   theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
   theme(legend.position="none")
-ggsave(gg2,file="~/Desktop/total_HMIDs_by_embryo.png",width=8,height=1.5)
-ggsave(gg2,file="~/Desktop/total_HMIDs_by_embryo.svg",width=8,height=1.5)
+ggsave(gg2,file="~/Desktop/total_HMIDs_by_embryo.pdf",width=8,height=3)
 
 
 # now sort by hour, then by unique counts
-embryo_uniques$stage = factor(as.character(embryo_uniques$stage),levels=c("4.3HR","9HR","30HR","72HR"))
-embryo_uniques = embryo_uniques[order(embryo_uniques$stage,embryo_uniques$edited.HMID.prop),]
-embryo_uniques$index = seq(1,nrow(embryo_uniques))
-embryo_uniques$sample = factor(embryo_uniques$sample,levels=embryo_uniques$sample)
+#embryo_uniques$stage = factor(as.character(embryo_uniques$stage),levels=c("4.3HR","9HR","30HR","72HR"))
+#embryo_uniques = embryo_uniques[order(embryo_uniques$stage,embryo_uniques$edited.HMID.prop),]
+#embryo_uniques$index = seq(1,nrow(embryo_uniques))
+#embryo_uniques$sample = factor(embryo_uniques$sample,levels=embryo_uniques$sample)
 
 # plot by concentation and timepoint
 gg4 = ggplot(embryo_uniques) + 
@@ -115,11 +114,10 @@ gg4 = ggplot(embryo_uniques) +
   geom_hline(aes(yintercept=2),color="white") +
   geom_hline(aes(yintercept=4),color="white") +
   geom_hline(aes(yintercept=6),color="white") +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) + 
   theme(legend.position="none") +
   ylim(c(0,10))
 
 
-ggsave(gg4,file="~/Desktop/mean_editing_rate.png",width=8,height=1.5)
-ggsave(gg4,file="~/Desktop/mean_editing_rate.svg",width=8,height=1.5)
+ggsave(gg4,file="~/Desktop/mean_editing_rate.pdf",width=8,height=3)
 

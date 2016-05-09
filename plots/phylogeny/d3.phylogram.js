@@ -4,10 +4,11 @@
 
 // ************************************************************************************************************************
 //
-// The main entry point for the script -- load and draw the tree, and add out events on the right side of the diagram
+// The main entry point for the script -- d3 tree drawing
 //
 // ************************************************************************************************************************
 
+// the next two function allow for either square or zig-zag lines to be drawn
 var diagonal = d3.svg.diagonal()
     .source(function(d) { return {"x":d.source.x, "y":d.source.y}; })            
     .target(function(d) { return {"x":d.target.x, "y":d.target.y}; })
@@ -151,7 +152,7 @@ function build_tree(selector, root, options) {  // , taxaToObj, maxCount) {
 		var event = nd.event// taxaToObj(d.name).event
 		var eventArray = padWithMatches(hmidToEvents(nd.event),startRegion,endRegion)
 		drawDottedConnector(nd)		    
-		drawNodes(eventArray,nd,250,endRegion-startRegion,barHeight,barWidth)
+		drawEditStrings(eventArray,nd,250,endRegion-startRegion,barHeight,barWidth)
 		drawMembership(nd,(barHeight),(barWidth))
 		// drawBloodProp(nd,barHeight,barWidth,maxBlood)
 		drawCounts(nd,scaleCounts, barHeight)
@@ -177,13 +178,13 @@ function build_tree(selector, root, options) {  // , taxaToObj, maxCount) {
             .attr("x1", d.y)
             .attr("y2", d.x)
             .attr("x2", event_location)
-            .style("stroke-dasharray", ("3, 3"))
+            .style("stroke-dasharray", ("2, 5"))
             .style("stroke-opacity", 1.5)
             .style("stroke", "gray")
     }
     
     // draw the nodes -- the boxes that represent the insertion and deletions over the read
-    function drawNodes(eventArray, d, barLength,size, barHeight) {
+    function drawEditStrings(eventArray, d, barLength,size, barHeight) {
 	// scale from the event window to the barlength on the screen
 	var scaleX = d3.scale.linear().range([0,barLength]).domain([0,size])
 	var heatmap_colors = ['#FFFFFF','#CE343F','#2E4D8E','#D49E35'];
@@ -295,13 +296,11 @@ function build_tree(selector, root, options) {  // , taxaToObj, maxCount) {
 	    // .filter(function(d) {return d.children })
 	    .attr("r", circleSize)
 	    .attr('fill', function(d) {
-		if (d.consistency == "SOLO" ||  d.consistency == "WT") {
-		    return "white"
-		} if (d.consistency == "NOINFO") {
-		    return "gray"
-		}else {
+		if (d.nodecolor) {
+		    return d.nodecolor
+		} else {
 		    return "black"
-		}			
+		}
 	    }) 
 	    .attr('stroke', circleOutline)
 	    .attr('stroke-width', 0.5)

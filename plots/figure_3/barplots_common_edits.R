@@ -4,10 +4,11 @@ library(reshape2)
 
 
 # shape the data down to usable columns and samples
-embryo_uniques = read.delim("/mount/vol10/CRISPR.lineage/nobackup/2016_03_05_Embryos/embryos_sup_table.txt")
+embryo_uniques = read.delim("/mount/vol10/CRISPR.lineage/nobackup/2016_05_04_embryo_rerun/2016_05_04_embryo_rerun_supplement.txt")
 embryo_uniques = embryo_uniques[embryo_uniques$sample != "3d_1b_0.3x" & embryo_uniques$sample != "3d_1b_1x",]
 embryo_uniques = embryo_uniques[,complete.cases(t(embryo_uniques))]
-embryo_uniques = embryo_uniques[embryo_uniques$passHMIDs > 100 & embryo_uniques$uniqueHMIDs > 20,]
+# embryo_uniques = embryo_uniques[embryo_uniques$passHMIDs > 100 & embryo_uniques$uniqueHMIDs > 20,]
+embryo_uniques = embryo_uniques[embryo_uniques$passHMIDs > 150,]
 
 # pull out the rate information
 split_to_rate = function(x) {
@@ -43,7 +44,7 @@ embryo_uniques = embryo_uniques[order(embryo_uniques$stage,embryo_uniques$unique
 embryo_uniques$index = seq(1,nrow(embryo_uniques))
 embryo_uniques$sample = factor(embryo_uniques$sample,levels=embryo_uniques$sample)
 
-top_events = "/Users/aaronmck/google_drive/UW/shendure/CRISPR/2016_03_26_figure_3E/top_events_per_embryo.txt"
+top_events = "/Users/aaronmck/google_drive/UW/shendure/CRISPR/2016_03_26_figure_3E/top_events_per_embryo_new_all.txt"
 
 top_event_table = read.delim(top_events,stringsAsFactors=F)
 top_event_table = top_event_table[order(top_event_table$propotions,decreasing = T),]
@@ -58,18 +59,20 @@ top_event_table$rate = sapply(top_event_table$sample,split_to_rate)
 top_event_table$stage = sapply(top_event_table$sample,split_to_hour)
 
 idx <- match(top_event_table$sample,embryo_uniques$sample)
-top_event_table$uniqueHMIDs <- embryo_uniques$Values[idx]
+top_event_table$uniqueHMIDs <- embryo_uniques$passHMIDs[idx]
 
 top_event_table$stage = factor(as.character(top_event_table$stage),levels=c("4.3HR","9HR","30HR","72HR"))
 
 top_event_table = top_event_table[order(top_event_table$stage,top_event_table$propotions),]
 top_event_table$sample = factor(top_event_table$sample,levels=embryo_uniques$sample)
 top_event_table[top_event_table$type == "other",]$propotions = -1.0*top_event_table[top_event_table$type == "other",]$propotions
+top_event_table = top_event_table[complete.cases(top_event_table),]
+top_event_table = top_event_table[order(top_event_table$stage,top_event_table$uniqueHMIDs),]
 
 # plot by concentation and timepoint
 prom_edits = ggplot(data=top_event_table) + 
   geom_bar(data=subset(top_event_table,type=="top"),aes(sample,propotions,fill=stage),stat="identity",width=.7) + 
-  geom_bar(data=subset(top_event_table,type=="other"),aes(sample,propotions),fill="#A7A5A5",stat="identity",width=.7) + 
+  geom_bar(data=subset(top_event_table,type=="other"),aes(sample,propotions,fill=stage),fill="#A7A5A5",stat="identity",width=.7) + 
   scale_fill_manual(values=dev_colors) + 
   ylim(c(-0.25,0.60)) + scale_y_continuous(breaks=c(-.25, 0.0, 0.25, 0.50)) + 
   theme_tufte() + xlab("") + ylab("Dominant edit proportion") +
@@ -89,6 +92,6 @@ prom_edits = ggplot(data=top_event_table) +
   # theme(axis.text.x = element_blank()) +
   theme(legend.position="none")
 
-ggsave(prom_edits,file="~/Desktop/proportion_of_events.pdf",width=8,height=4)
-ggsave(prom_edits,file="~/Desktop/proportion_of_events.png",width=8,height=3)
+# ggsave(prom_edits,file="~/Desktop/proportion_of_events.pdf",width=8,height=4)
+ggsave(prom_edits,file="~/Desktop/proportion_of_events.pdf",width=8,height=3)
 
