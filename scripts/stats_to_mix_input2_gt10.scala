@@ -9,11 +9,10 @@ import scala.collection.immutable.ListMap
 val tearsheet = Source.fromFile(args(0)).getLines().drop(1)
 
 val output = new PrintWriter(args(1))
-val mixCommandFile = new PrintWriter(args(2))
-val annotationFile = new PrintWriter(args(3))
-val weightFile = new PrintWriter(args(4))
-val eventsToNumbers = new PrintWriter(args(5))
-val filteringNumber = 2
+val annotationFile = new PrintWriter(args(2))
+val weightFile = new PrintWriter(args(3))
+val eventsToNumbers = new PrintWriter(args(4))
+val filteringNumber = args(5).toInt
 
 // --------------------------------------------------
 // all reads object
@@ -23,7 +22,6 @@ case class Event(events: Array[String], eventNumbers: Array[Int], count: Int, pr
 
   // make a padded version of the name
   val paddedName = name + (0 until (10 - name.length)).map{i => " "}.mkString("")
-
 
   // make a binary representation of the events
   def toMixString(index: Int): Tuple2[String,Boolean] = {
@@ -63,6 +61,7 @@ var nextIndex = 1
 // ---------------------------------------------------------
 tearsheet.foreach{line => {
   val sp = line.split("\t")
+  println(sp(3) + "/" + sp(0) + "/" + sp(0) + ".allReadCounts")
   Source.fromFile(sp(3) + "/" + sp(0) + "/" + sp(0) + ".allReadCounts").getLines().drop(1).zipWithIndex.foreach{case(line,index) => {
     val lineTks = line.split("\t")
 
@@ -144,8 +143,9 @@ eventsBuffer.toArray.foreach{evt => {
 
 annotationFile.close()
 
-output.write((outputBuffer.size + 1) + "\t" + (nextIndex - 3) + "\n")
-output.write("fakeroot  " + (1 until nextIndex).map{index => "0"}.mkString("") + "\n")
+output.write((outputBuffer.size) + "\t" + (nextIndex - 3) + "\n")
+//output.write((outputBuffer.size + 1) + "\t" + (nextIndex - 3) + "\n")
+//output.write("fakeroot  " + (1 until nextIndex).map{index => "0"}.mkString("") + "\n")
 outputBuffer.foreach{case(str) => {
   output.write(str + "\n")
 }}

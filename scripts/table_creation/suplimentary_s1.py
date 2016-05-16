@@ -91,11 +91,14 @@ def analyze_stats_file(stats_file, sample, target_count, ref_name, reference, um
     row_failed_primer2 = 0
     row_failed_alignment = 0
     rows_edited = 0
+    row_site_edits_counts = []
     row_edits_counts = []
     row_intact_counts = []
-    cuts_per_row = [] 
+    cuts_per_row = []
+    unique_edits_per_row = []
     deletion_sizes = []
     insertion_sizes = []
+    
     target_to_edit_count = {("target" + str(n)) : 0 for n in range(1,target_count+1)}
     target_to_intact_count = {("sequence" + str(n)) : 0 for n in range(1,target_count+1)}
     target_to_contains_count = {("sequence" + str(n)) : 0 for n in range(1,target_count+1)}
@@ -140,7 +143,7 @@ def analyze_stats_file(stats_file, sample, target_count, ref_name, reference, um
 
 
             if "UNKNOWN" in "_".join(hmid):
-                print "FUUUUCK " + "_".join(hmid)
+                print "SERIOUS PROBLEM " + "_".join(hmid)
                 
             for sequence, pos in sequence_positions.iteritems():
                 read_sequence = tokens[pos]
@@ -157,6 +160,7 @@ def analyze_stats_file(stats_file, sample, target_count, ref_name, reference, um
             row_edits_counts.append(edits_in_row)
             row_intact_counts.append(intact_sites)
             cuts_per_row.append(sum([2 if y > 1 else 1 for x,y in unique_edits_in_row.iteritems()]))
+            unique_edits_per_row.append(sum([1 for x,y in unique_edits_in_row.iteritems()]))
             
             hmid_string = "".join(hmid)
             if hmid_string in hmid_to_count:
@@ -184,6 +188,7 @@ def analyze_stats_file(stats_file, sample, target_count, ref_name, reference, um
     deletion_median = np.median(deletion_sizes)
     edits_mean = np.mean(row_edits_counts)
     cuts_mean = np.mean(cuts_per_row)
+    edit_event_mean = np.mean(unique_edits_per_row)
     intact_mean = np.mean(row_intact_counts)
 
     out_row_failure = float(row_failed)/float(row_count)
@@ -202,7 +207,7 @@ def analyze_stats_file(stats_file, sample, target_count, ref_name, reference, um
     return_str =  experiment_name + "\t" + sample + "\t" + ref_name + "\t" + str(umi) + "\t"
     return_str += str(row_count) + "\t" + str(len(hmid_to_count)) + "\t" + str(out_row_failure) + "\t" + str(out_edited_rows) + "\t"
     return_str += str(out_failed_prim1) + "\t" + str(out_failed_prim2) + "\t" + str(out_failed_align) + "\t"
-    return_str += str(edits_mean) + "\t" + str(cuts_mean) + "\t" + str(intact_mean) + "\t" + str(out_unknown_lines) + "\t"
+    return_str += str(edits_mean) + "\t" + str(cuts_mean) + "\t" + str(edit_event_mean) + "\t" + str(intact_mean) + "\t" + str(out_unknown_lines) + "\t"
     return_str += str(hmid_median) + "\t" + str(insertion_median) + "\t" + str(deletion_median) + "\t"
     
     output_tags = []
@@ -272,7 +277,7 @@ args = parser.parse_args()
 output = open(args.output,"w")
 
 targets = "\t".join(["targetEditProp" + str(x) + "\tuniqueEventsTarget" + str(x) + "\tintactProp" + str(x) + "\tcontainsProp" + str(x) for x in range(1,13)])
-output.write("experiment\tsample\trefName\tumi\tpassHMIDs\tuniqueHMIDs\tfailed.HMID.prop\tedited.HMID.prop\tfailed.primer1\tfailed.primer2\tfailed.align.pct\tmeanSitesEdited\tmeanCutSites\tmeanIntactSites\tunknownLineProp\tmedianHMIDcount\tmedianInsertSize\tmedianDeletionSize\t" + targets + "\n")
+output.write("experiment\tsample\trefName\tumi\tpassHMIDs\tuniqueHMIDs\tfailed.HMID.prop\tedited.HMID.prop\tfailed.primer1\tfailed.primer2\tfailed.align.pct\tmeanSitesEdited\tmeanCutSites\tmeanEvents\tmeanIntactSites\tunknownLineProp\tmedianHMIDcount\tmedianInsertSize\tmedianDeletionSize\t" + targets + "\n")
 
 get_analysis_directories(args.analysis_dir_file,output)
 output.close()

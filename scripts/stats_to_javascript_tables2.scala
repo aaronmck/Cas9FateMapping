@@ -47,18 +47,20 @@ case class HMID(events: Array[Event]) {
   def eventToPerBase2(startPosition: Int, endPosition: Int): Array[ETPB] = {
     var eventPBs = Array[ETPB]()
     events.foreach{evt => {
+
+      // if the type is not NONE, pad check to see if we need to pad with NONEs to 1) the beginning if we're the first event,
+      // or 2) pad to the last event if there's a gap, then add the event
       if (evt.classOf != NoneType) {
         if (eventPBs.size == 0 && evt.position > startPosition)
           eventPBs :+= ETPB(startPosition, evt.position, 0)
-        else if (eventPBs(eventPBs.size - 1).stop < evt.position)
+        else if (eventPBs.size > 0 && eventPBs(eventPBs.size - 1).stop < evt.position)
           eventPBs :+= ETPB(eventPBs(eventPBs.size - 1).stop, evt.position, 0)
 
-        if (evt.classOf == Deletion)
-          eventPBs :+= ETPB(evt.position, evt.position + evt.size, evt.classOf.toInt)
-        else
-          eventPBs :+= ETPB(evt.position, evt.position + evt.size, evt.classOf.toInt)
+        eventPBs :+= ETPB(evt.position, evt.position + evt.size, evt.classOf.toInt)
       }
     }}
+
+    // pad to the end, and if we didn't have any non-NONE events, pad for the whole read with a NONE
     if (eventPBs.size > 0 && eventPBs(eventPBs.size - 1).stop < endPosition) {
       eventPBs :+= ETPB(eventPBs(eventPBs.size - 1).stop, endPosition, 0)
     } else if (eventPBs.size == 0) {
