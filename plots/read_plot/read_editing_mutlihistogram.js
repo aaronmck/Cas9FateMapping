@@ -73,6 +73,8 @@ var svg = d3.select("#left").append("svg")
     .attr("width", global_width)
     .attr("height", global_height)
     .append("g")
+    .attr("transform", "translate(10,10)")
+
     
 /*var svgHeatRight = d3.select("#heatmapRight")
     .append("svg")
@@ -257,10 +259,19 @@ function redrawTheTopHistogram() {
     }
     
     svg.append("g")
-        .attr("class", "y axis")
         .attr("transform", "translate(" + (xEvents(0) - 5) + ",0)")
         .attr("anchor", "right")
         .call(yAxis)
+	.style("fill","none")
+    	.style("stroke","#000")
+    	.style("shape-rendering","crispEdges")
+	.selectAll("text")
+	.style("text-anchor", "end")
+        .attr("dx", "-.8em")
+        .attr("dy", ".15em")
+	.style("fill","black")
+    	.style("stroke-width",0)
+    	.style("shape-rendering","crispEdges")
 
     var legendText = "Editing (%)"
 
@@ -395,11 +406,11 @@ function redrawHistogram() {
     if (xScaleIsLog) {
 	svg.append("g")
             .attr("class", "axis")
-            .style("text-anchor", "end")
-            .attr("dx", "-.8em")
-            .attr("dy", ".15em")
 	    .attr("transform", "translate(" + (top_width + right_histo_buffer_x) + ","  + ( top_height - 5) + ")")
             .call(xAxisHistoRight)
+	    .style("fill","none")
+    	    .style("stroke","#000")
+    	    .style("shape-rendering","crispEdges")
 	    .selectAll(".tick")
             .each(function (d, i) {
                 if (d == 0 || this.textContent == "" || !(Math.log10(+this.textContent) % 1 === 0)) {
@@ -415,22 +426,28 @@ function redrawHistogram() {
             .attr("dy", ".15em")
             .attr("transform", "rotate(90)")
             .attr("y", 1)
+	    .style("fill","black")
+    	    .style("stroke-width",0)
+    	    .style("shape-rendering","crispEdges")
         
     } else {
 	svg.append("g")
-        .attr("class", "axis")
-        .style("text-anchor", "end")
-        .attr("dx", "-.8em")
-        .attr("dy", ".15em")
-	.attr("transform", "translate(" + (top_width + right_histo_buffer_x) + ","  + ( top_height - 5) + ")")
-        .call(xAxisHistoRight)
-	.selectAll("text")
-	.style("text-anchor", "end")
-        .attr("dx", "-.8em")
-        .attr("dy", ".15em")
-        .attr("transform", "rotate(90)")
-        .attr("y", 1)
-        .selectAll(".tick")
+            .attr("class", "axis")
+	    .attr("transform", "translate(" + (top_width + right_histo_buffer_x) + ","  + ( top_height - 5) + ")")
+            .call(xAxisHistoRight)
+	    .style("fill","none")
+    	    .style("stroke","#000")
+    	    .style("shape-rendering","crispEdges")
+	    .selectAll("text")
+	    .style("text-anchor", "end")
+            .attr("dx", "-.8em")
+            .attr("dy", ".15em")
+            .attr("transform", "rotate(90)")
+            .attr("y", 1)
+	    .style("fill","black")
+    	    .style("stroke-width",0)
+    	    .style("shape-rendering","crispEdges")
+            .selectAll(".tick")
             .each(function (d, i) {
                 if (i % 2 == 0) {
                     this.remove();
