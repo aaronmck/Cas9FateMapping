@@ -44,7 +44,9 @@ case class TreeConfig(inputTree: File = new File(Main.NOTAREALFILENAME),
                       inputSampleToClade: File = new File(Main.NOTAREALFILENAME),
                       inputEventsToNumbers: File = new File(Main.NOTAREALFILENAME),
                       eventsToColors: File = new File(Main.NOTAREALFILENAME),
-                      outputTree: File = new File(Main.NOTAREALFILENAME))
+                      optionalAnnotations: String = "",
+                      outputTree: File = new File(Main.NOTAREALFILENAME),
+                      numberOfTargets: Int = 10)
 
 
 object Main extends App {
@@ -57,13 +59,15 @@ object Main extends App {
     head("TreeUtils", "1.0")
 
     // *********************************** Inputs *******************************************************
-    opt[File]("inputTree") required() valueName ("<file>") action { (x, c) => c.copy(inputTree = x) } text ("first read file ")
-    opt[File]("inputGenotypes") required() valueName ("<file>") action { (x, c) => c.copy(inputGenotypes = x) } text ("first read file ")
-    opt[File]("inputAnnotations") required() valueName ("<file>") action { (x, c) => c.copy(inputAnnotations = x) } text ("first read file ")
-    opt[File]("inputSampleToClade") required() valueName ("<file>") action { (x, c) => c.copy(inputSampleToClade = x) } text ("first read file ")
-    opt[File]("inputEventsToNumbers") required() valueName ("<file>") action { (x, c) => c.copy(inputEventsToNumbers = x) } text ("first read file ")
-    opt[File]("eventsToColors") valueName ("<file>") action { (x, c) => c.copy(eventsToColors = x) } text ("first read file ")
-    opt[File]("outputTree") required() valueName ("<file>") action { (x, c) => c.copy(outputTree = x) } text ("second reads file")
+    opt[File]("inputTree") required() valueName ("<file>") action { (x, c) => c.copy(inputTree = x) } text ("the input tree")
+    opt[File]("inputGenotypes") required() valueName ("<file>") action { (x, c) => c.copy(inputGenotypes = x) } text ("the outfile from mix")
+    opt[File]("inputAnnotations") required() valueName ("<file>") action { (x, c) => c.copy(inputAnnotations = x) } text ("the annotations file")
+    opt[File]("inputSampleToClade") required() valueName ("<file>") action { (x, c) => c.copy(inputSampleToClade = x) } text ("mapping from sample to clade and color")
+    opt[File]("inputEventsToNumbers") required() valueName ("<file>") action { (x, c) => c.copy(inputEventsToNumbers = x) } text ("a mapping from the event to the mix column number")
+    opt[File]("eventsToColors") valueName ("<file>") action { (x, c) => c.copy(eventsToColors = x) } text ("assign colors to nodes of each event on the tree")
+    opt[Int]("numberOfTargets") valueName ("<file>") action { (x, c) => c.copy(numberOfTargets = x) } text ("the number of targets")
+    opt[String]("optionalAnnotations") valueName ("<file>") action { (x, c) => c.copy(optionalAnnotations = x) } text ("any optional annotations")
+    opt[File]("outputTree") required() valueName ("<file>") action { (x, c) => c.copy(outputTree = x) } text ("the tree to produce")
 
     // some general command-line setup stuff
     note("processes reads with UMIs into merged reads\n")
@@ -79,6 +83,8 @@ object Main extends App {
       config.inputSampleToClade,
       config.inputEventsToNumbers,
       if (config.eventsToColors.getAbsolutePath contains NOTAREALFILENAME) None else Some(config.eventsToColors),
+      if (config.optionalAnnotations == "") List[File]() else config.optionalAnnotations.split(",").map{fl => new File(fl)}.toList,
+      config.numberOfTargets,
       config.outputTree)
   }} getOrElse {
     println("Unable to parse the command line arguments you passed in, please check that your parameters are correct")

@@ -18,6 +18,8 @@ class ParsimonyProcessor(mixTrees: File,
                          sampleToClade: File,
                          eventsToNumbers: File,
                          eventColorsFile: Option[File],
+                         otherAnnotations: List[File],
+                         numberOfTargets: Int,
                          outputFile: File) {
 
   // TODO: add a normalization process like FigTree for proportional scaling
@@ -36,13 +38,13 @@ class ParsimonyProcessor(mixTrees: File,
   val annotationMapping = new AnnotationsManager(annotations, sampleToClade, eventColorsFile)
 
   // traverse the nodes and add names to any internal nodes without names
-  val rootNode = RichNode(treeParser.getRoot,annotationMapping, None)
+  val rootNode = RichNode(treeParser.getRoot,annotationMapping, None,numberOfTargets)
 
   // reassign the names
   val rootName = RichNode.recAssignNames(rootNode, mixParser)
 
   // now apply the parsimony results to the root of the tree (recursively walking down the nodes)
-  RichNode.applyParsimonyGenotypes(rootNode, mixParser)
+  RichNode.applyParsimonyGenotypes(rootNode, mixParser,numberOfTargets)
 
   // check that the nodes we assigned are consistent
   RichNode.recCheckNodeConsistency(rootNode, mixParser)
@@ -76,3 +78,5 @@ class ParsimonyProcessor(mixTrees: File,
   output.close()
 
 }
+
+

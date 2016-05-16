@@ -56,7 +56,7 @@ case class RichNode(originalNd: Node,
   var childrenEvents = Array[String]()
 
   originalNd.getChildren.asScala.foreach { nd => {
-    children :+= RichNode(nd, annotations, Some(this))
+    children :+= RichNode(nd, annotations, Some(this),numberOfTargets)
   }
   }
 
@@ -152,8 +152,8 @@ case class RichNode(originalNd: Node,
   * We use the static methods here to transform nodes after they're created.
   */
 object RichNode {
-  def toRichTree(inputTree: TreeParser, annotationsManager: AnnotationsManager): RichNode = {
-    return RichNode(inputTree.getRoot, annotationsManager, None)
+  def toRichTree(inputTree: TreeParser, annotationsManager: AnnotationsManager, numberOfTargets: Int): RichNode = {
+    return RichNode(inputTree.getRoot, annotationsManager, None, numberOfTargets)
   }
 
   /**
@@ -187,6 +187,7 @@ object RichNode {
     * @param parser   the results from the parsimony run
     */
   def applyParsimonyGenotypes(rootNode: RichNode, parser: MixParser, numberOfTargets: Int = 10): Unit = {
+    println(numberOfTargets)
     // lookup each link between a subnode and the root, and assign it's genotypes recursively
     rootNode.children.foreach { newChild => recAssignGentoypes(rootNode, newChild, parser) }
   }
@@ -274,10 +275,10 @@ object RichNode {
     *
     * @param node the node to start sorting on
     */
-  def applyFunction(node: RichNode, func: RichNode => Tuple2[String,String]): Unit = {
-    val res = func(node)
+  def applyFunction(node: RichNode, func: (RichNode, Option[RichNode]) => Tuple2[String,String]): Unit = {
+    val res = func(node, node.parent)
     node.freeAnnotations(res._1) = res._2
-    node.children.foreach { case (nd) => applyFunction(nd,func) }
+    node.children.foreach { case (nd) => applyFunction(nd, func) }
   }
 
   /**
@@ -292,6 +293,9 @@ object RichNode {
       val differences = node.eventString.get.zip(node.parsimonyEvents).map { case (evt1, evt2) => if (evt1 == evt2) 0 else 1 }.sum
       if (differences > 0) {
         println("FAIL " + node.eventString.get.mkString(",") + " - " + node.parsimonyEvents.mkString(","))
+        println("Defaulting to known event state... please check this in the tree")
+        node.eventString.get.zipWithIndex.foreach{case(event, index) => node.parsimonyEvents(index) = event}
+
       }
     } else {
       node.children.map { case (nd) => recCheckNodeConsistency(nd, parser) }.toSet.toList

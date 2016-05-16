@@ -98,15 +98,27 @@ class AnnotationsManager(annotations: File, sampleToClade: File, cladeIdentities
     * @param node the event node
     * @return a color string
     */
-  def setNodeColor(node: RichNode): Tuple2[String,String] = {
+  def setNodeColor(node: RichNode, parentNode: Option[RichNode]): Tuple2[String,String] = {
     if (!eventDefinitionsToColors.isDefined)
       return ("nodecolor","black")
+
+    var assigned_colors = Array[String]()
     eventDefinitionsToColors.get.foreach{case(color,arrayOfEvents) => {
       val containCount = arrayOfEvents.map{case(chkEvt) => if (node.parsimonyEvents contains chkEvt) 1 else 0}.sum
-      if (containCount == arrayOfEvents.size) {
-        return ("nodecolor",color)
+
+      var parentContains = 0
+      if (parentNode.isDefined)
+        parentContains = arrayOfEvents.map{case(chkEvt) => if (parentNode.get.parsimonyEvents contains chkEvt) 1 else 0}.sum
+
+      // the second part of this expression is to deal with Jamie's clade choices
+      if (containCount == arrayOfEvents.size && (node.children.size > 0 || parentContains == arrayOfEvents.size)) {
+        assigned_colors :+= color
       }
     }}
+
+    // check for conflict, only assign if it's one color
+    if (assigned_colors.size == 1)
+      return ("nodecolor",assigned_colors(0))
     return ("nodecolor","black")
   }
 
