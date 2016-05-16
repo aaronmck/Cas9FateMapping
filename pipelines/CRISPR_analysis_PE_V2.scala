@@ -84,7 +84,7 @@ class DNAQC extends QScript {
   var dontTrim: Boolean = false
 
   @Argument(doc = "the minimum quality score we accept; less than this we trim off the ends, or trim when we see a window averaging this quality score", fullName = "trimQual", shortName = "trimQual", required = false)
-  var trimQual: Int = 20
+  var trimQual: Int = 10
 
   @Argument(doc = "how many bases to average over in our sliding window cleaning using Trimmomatic", fullName = "trimWindow", shortName = "trimWindow", required = false)
   var trimWindow: Int = 5
@@ -92,8 +92,11 @@ class DNAQC extends QScript {
   @Argument(doc = "read length (how long is each read in a pair (300 cycle kit -> 150bp reads = 150), for ", fullName = "readLength", shortName = "readLength", required = false)
   var readLength: Int = 250
 
-  @Argument(doc = "are we runing with UMI reads? If so, set this value to > 0, representing the UMI length", fullName = "umi", shortName = "umi", required = false)
-  var umiData: Int = 0
+  @Argument(doc = "are we runing with UMI reads? If so, set this value to > 0, representing the UMI length", fullName = "umiLength", shortName = "umiLength", required = false)
+  var umiLength: Int = 10
+
+  @Argument(doc = "where does the UMI start in the read", fullName = "umiStart", shortName = "umiStart", required = false)
+  var umiStart: Int = 0
 
   @Argument(doc = "the number of UMIs required to call a successful UMI capture event, if you're using UMIs", fullName = "minimumUMIReads", shortName = "minimumUMIReads", required = false)
   var minimumUMIReads = 10
@@ -102,7 +105,7 @@ class DNAQC extends QScript {
   var minimumSurvivingUMIReads = 6
 
   @Input(doc = "where to put the web files", fullName = "web", shortName = "web", required = false)
-  var webSite: File = "/net/shendure/vol2/www/content/members/aaron/fate_map/"
+  var webSite: File = "/net/shendure/vol2/www/content/members/aaron/staging/"
 
   /** **************************************************************************
     * Path parameters -- where to find tools
@@ -111,7 +114,7 @@ class DNAQC extends QScript {
   var scalaPath: File = new File("/net/gs/vol1/home/aaronmck/tools/bin/scala")
 
   @Input(doc = "The path to the Trimmomatic adapters file", fullName = "trimadapters", shortName = "tad", required = false)
-  var adaptersFile: File = new File("/net/gs/vol1/home/aaronmck/tools/trimming/Trimmomatic-0.32/adapters/TruSeq3-PE.fa")
+  var adaptersFile: File = new File("/net/gs/vol1/home/aaronmck/tools/trimming/Trimmomatic-0.32/adapters/PU1L.fa")
 
   @Input(doc = "The path to the binary of fastqc", fullName = "fastqc", shortName = "fqc", required = false)
   var fastqcPath: File = "/net/gs/vol1/home/aaronmck/tools/fastqc/FastQC/fastqc"
@@ -160,6 +163,13 @@ class DNAQC extends QScript {
 
   @Argument(doc = "the second adapter sequence", fullName = "adaptTwo", shortName = "adaptTwo", required = false)
   var adapterTwo = "CGAAGCTTGAGCTCGAGATCTG"
+
+  @Argument(doc = "the cost of a gap open", fullName = "gapopen", shortName = "gapopen", required = false)
+  var gapopen: Double = 10
+
+  @Argument(doc = "the cost of a gap extend", fullName = "gapextend", shortName = "gapextend", required = false)
+  var gapextend: Double = 0.5
+
 
   /** **************************************************************************
     * Global Variables
@@ -244,6 +254,7 @@ class DNAQC extends QScript {
       val toAlignFastq1 = new File(sampleOutput + File.separator + sampleTag + ".fwd.fastq")
       val toAlignFastq2 = new File(sampleOutput + File.separator + sampleTag + ".rev.fastq")
       val toAlignStats = new File(sampleOutput + File.separator + sampleTag + ".stats")
+      val toAligUMICounts = new File(sampleOutput + File.separator + sampleTag + ".umiCounts")
       
       val perBaseEventFile = new File(sampleOutput + File.separator + sampleTag + ".perBase")
       val topReadFile = new File(sampleOutput + File.separator + sampleTag + ".topReadEvents")
@@ -280,7 +291,8 @@ class DNAQC extends QScript {
           toAlignFastq2,
           10,
           new File(sampleObj.reference + ".primers"),
-          sampleObj.sample))
+          sampleObj.sample,
+          toAligUMICounts))
 
         cleanedTmp = List[File](toAlignFastq1,toAlignFastq2)
       }
@@ -505,7 +517,7 @@ class DNAQC extends QScript {
     @Output(doc = "the output fasta file") var outFasta = outputFasta
 
     //-sreverse2
-    def commandLine = needlePath + " -datafile /net/shendure/vol10/projects/CRISPR.lineage/nobackup/reference_data/EDNAFULL -snucleotide1 -snucleotide2 " + (if (reverse) "-sreverse2 " else " ") + "-aformat3 fasta -gapextend 0.5 -gapopen 10.0 -asequence " + ref + " -bsequence " + fq + " -outfile " + outFasta
+    def commandLine = needlePath + " -datafile /net/shendure/vol10/projects/CRISPR.lineage/nobackup/reference_data/EDNAFULL -snucleotide1 -snucleotide2 " + (if (reverse) "-sreverse2 " else " ") + "-aformat3 fasta -gapextend " + gapextend + " -gapopen " + gapopen + " -asequence " + ref + " -bsequence " + fq + " -outfile " + outFasta
 
     this.analysisName = queueLogDir + outFasta + ".needle"
     this.jobName = queueLogDir + outFasta + ".needle"
@@ -690,20 +702,22 @@ class DNAQC extends QScript {
    */
   // ********************************************************************************************************
   case class UMIProcessingPaired(inMergedReads1: File, inMergedReads2: File, outputFASTA1: File, outputFASTA2: File,
-    umiCutOff: Int, primersFile: File, sampleName: String) extends CommandLineFunction with ExternalCommonArgs {
+    umiCutOff: Int, primersFile: File, sampleName: String, umiCountsFile: File) extends CommandLineFunction with ExternalCommonArgs {
 
     @Input(doc = "input reads (fwd)") var inReads1 = inMergedReads1
     @Input(doc = "input reads (rev)") var inReads2 = inMergedReads2
     @Output(doc = "output fasta for further alignment (fwd)") var outFASTA1 = outputFASTA1
     @Output(doc = "output fasta for further alignment (rev)") var outFASTA2 = outputFASTA2
+    @Output(doc = "output a counts of the reads behind each UMI") var outUMIs = umiCountsFile
     @Argument(doc = "how many UMIs do we need to initial have to consider merging them") var umiCut = umiCutOff
     @Argument(doc = "the primers file; one line per primer that we expect to have on each end of the resulting merged read") var primers = primersFile
     @Argument(doc = "the sample name") var sample = sampleName
 
-    var cmdString = scalaPath + " -J-Xmx13g /net/shendure/vol10/projects/CRISPR.lineage/nobackup/bin/UMIMerge.jar "
+    var cmdString = scalaPath + " -J-Xmx15g /net/shendure/vol10/projects/CRISPR.lineage/nobackup/bin/UMIMerge.jar "
     cmdString += " --inputFileReads1 " + inReads1 + " --inputFileReads2 " + inReads2 + " --outputFastq1 " + outFASTA1 + " --outputFastq2 " + outFASTA2 
-    cmdString += " --umiLength " + umiCut + " --primersEachEnd " + primers + " --samplename " + sample
-    cmdString += " --umiStart 0 --minimumUMIReads " + minimumUMIReads + " --minimumSurvivingUMIReads " + minimumSurvivingUMIReads
+    cmdString += " --primersEachEnd " + primers + " --samplename " + sample
+    cmdString += " --umiStart " + umiStart + " --minimumUMIReads " + minimumUMIReads + " --minimumSurvivingUMIReads " + minimumSurvivingUMIReads
+    cmdString += " --umiCounts " + outUMIs + " --umiLength " + umiLength
 
     var cmd = cmdString
 
