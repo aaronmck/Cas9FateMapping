@@ -10,7 +10,8 @@ var buffer = 5000
 // var reds = ["#190000","#4c0000","#7f0000","#b20000","#e50000","#ff0000","#ff3232","#ff6666","#ff9999","#ffcccc"].reverse()
 // var blues = ["#000019","#00004c","#00007f","#0000b2","#0000e5","#0000ff","#3232ff","#6666ff","#9999ff","#ccccff"].reverse()
 
-var reds = ["#7f0000","#e50000","#ff0000","#ff3232","#ff9999"].reverse()
+//var reds = ["#7f0000","#e50000","#ff0000","#ff3232","#ff9999"].reverse()
+var reds = ["#7f0000","#ff0000","#ff9999"].reverse()
 var blues = ["#6666ff"]
 var colors = d3.scale.ordinal().range(reds.concat(blues))
 
@@ -94,9 +95,9 @@ d3.tsv(event_file, function (error, data) {
 		return blues[+d.event_count-1];
 	    }
 	    if (d.type == "D") {
-		// limit the number of deletions to 5 (0 to 4 inclusive)
-		if ((+d.event_count-1) > 4) 
-		    return reds[4];
+		// limit the number of deletions to 3 (0 to 2 inclusive)
+		if ((+d.event_count-1) > 2) 
+		    return reds[2];
 		else
 		    return reds[+d.event_count-1];
 	    }
@@ -144,9 +145,9 @@ d3.tsv(event_file, function (error, data) {
 	.text(function(d,i) {
 	    if (i == 0) {
 		return (i+1) + " site affected, deletion";
-	    } else if (i < 4) {
+	    } else if (i < 2) {
 		return (i+1) + " sites affected, deletion";
-	    } else if (i == 4) {
+	    } else if (i == 2) {
 		return ">= " + (i+1) + " sites affected, deletion";
 	    } else {
 		return "1 site affected, insertion";

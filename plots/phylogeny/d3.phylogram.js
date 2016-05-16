@@ -81,7 +81,7 @@ function build_tree(selector, root, options) {  // , taxaToObj, maxCount) {
     
     // spacing and locations for various graphic members
     var event_location = options.width - (offset - 25);
-    var barWidth = 50
+    var barWidth = 25
     var barSpacer = 10 
     var barHeight = options.barheight
     
@@ -92,15 +92,19 @@ function build_tree(selector, root, options) {  // , taxaToObj, maxCount) {
     
     var membership_location = event_location + 275
     var barplot_location = membership_location + barWidth + barSpacer
-    
-    var bar_stroke_width = '1.0px'
+    var counts_bar_max_size = 150
+    var bar_stroke_width = '0.8px'
+    var edit_stroke_width = '.25px'
     
     // the offsets in the aligned reads to consider for event plotting
     var startRegion = 92
     var endRegion = 425
     
-    var scaleCounts = d3.scale.log().domain([1,100]).range([0,150])
+    var scaleCounts = d3.scale.log().domain([1,100]).range([0,counts_bar_max_size])
     var xAxis = d3.svg.axis().scale(scaleCounts).orient("bottom").ticks(5).tickFormat(function (d) {
+        return scaleCounts.tickFormat(4,d3.format(",d"))(d)
+    })
+    var xAxis2 = d3.svg.axis().scale(scaleCounts).orient("top").ticks(5).tickFormat(function (d) {
         return scaleCounts.tickFormat(4,d3.format(",d"))(d)
     })
     
@@ -116,7 +120,29 @@ function build_tree(selector, root, options) {  // , taxaToObj, maxCount) {
         .attr("width", w + 800)
         .attr("height", h + 200)
         .append("svg:g")
-        .attr("transform", "translate(20, 20)")
+        .attr("transform", "translate(30, 30)")
+
+    vis.append("g")
+	.attr("transform", "translate(" + (barplot_location) + "," + ( h + 2) + ")")
+	.call(xAxis)
+	.style("fill","none")
+    	.style("stroke","#000")
+    	.style("shape-rendering","crispEdges")
+	.selectAll("text")
+	.style("fill","black")
+    	.style("stroke-width",0)
+    	.style("shape-rendering","crispEdges")
+    
+    vis.append("g")
+	.attr("transform", "translate(" + (barplot_location) + "," + ( -2 ) + ")")
+	.call(xAxis2)
+    	.style("fill","none")
+    	.style("stroke","#000")
+    	.style("shape-rendering","crispEdges")
+	.selectAll("text")
+	.style("fill","black")
+    	.style("stroke-width",0)
+    	.style("shape-rendering","crispEdges")
     
     if (options.skipBranchLengthScaling) {
         var yscale = d3.scale.linear()
@@ -170,6 +196,17 @@ function build_tree(selector, root, options) {  // , taxaToObj, maxCount) {
 	    .attr("transform","translate(" + barplot_location + "," + (d.x + barHeight/2.0) + ") rotate(-90) ");
     }
     
+    // add a histogram for the proporiton of reads for this sample 
+    function drawAncestry(d, scaleValue, barHeight) {
+	var rectangle = vis.append("rect")
+	    .attr('fill', d.color) // taxaToObj(d.name).color)
+	    .attr('stroke', '#111')
+	    .attr('stroke-width', bar_stroke_width)
+	    .attr("width", barHeight)
+	    .attr("height",scaleValue( d.max_organ_prop * 100.0 + 1.0)) // (taxaToObj(d.name).proportion // FIX
+	    .attr("transform","translate(" + barplot_location + "," + (d.x + barHeight/2.0) + ") rotate(-90) ");
+    }
+    
     // draw a dotted connector from the end of the tree branch to the nodes / reads
     function drawDottedConnector(d) {
 	var myLine = vis.append("svg:line")
@@ -194,7 +231,7 @@ function build_tree(selector, root, options) {  // , taxaToObj, maxCount) {
                 .attr('fill', heatmap_colors[eventArray[i].typ] )
 		.attr('id', d.event )
                 .attr('stroke', '#111')
-                .attr('stroke-width', bar_stroke_width)
+                .attr('stroke-width', edit_stroke_width)
                 .attr("width", barHeight)
                 .attr("height", function(d) {return scaleX(eventArray[i].len)})
                 .attr("transform","translate(" + (event_location + scaleX(eventArray[i].pos)) + "," + (d.x + barHeight/2.0) + ") rotate(-90) ")
@@ -244,38 +281,6 @@ function build_tree(selector, root, options) {  // , taxaToObj, maxCount) {
     // ------------------------------------------------------------------------
     // the circles for the end nodes
     // ------------------------------------------------------------------------
-    
-    // the mapping of organs to colors 
-    var newColorMap = {"7B_1_to_100_blood": "#E03448 ", 
-		       "7B_1_to_20_blood" : "#B60B1F ", 
-		       "7B_1_to_500_blood" : "#F56C7C ", 
-		       "7B_Blood" : "#FF0000 ", 
-		       "7B_Brain" : "#4F6128 ", 
-		       "7B_Eye1" : "#77933C ", 
-		       "7B_Eye2" : "#C3D69B ", 
-		       "7B_Gills" : "#FFC000 ",
-		       "7B_Heart_chunk" : "#632523 ", 
-		       "7B_Heart_diss" : "#943735 ", 
-		       "7B_Heart_GFP-" : "#D99795 ", 
-		       "7B_Heart_GFP+" : "#E6B9B8 ", 
-		       "7B_Intestine" : "#558ED5 ", 
-		       "7B_Upper_GI" : "#8EB3E3 "}
-    
-    // the mapping of organs to colors 
-    var newColorMap2 = {"7B_1_to_100_blood": "#E03448 ", 
-			"7B_1_to_20_blood" : "#B60B1F ", 
-			"7B_1_to_500_blood" : "#F56C7C ", 
-			"blood" : "#FF0000 ", 
-			"brain" : "#4F6128 ", 
-			"left eye" : "#77933C ", 
-			"right eye" : "#C3D69B ", 
-			"gills" : "#FFC000 ",
-			"intact heart" : "#632523 ", 
-			"DHCs" : "#943735 ", 
-			"NCs" : "#D99795 ", 
-			"cardiomyocytes" : "#E6B9B8 ", 
-			"intest. bulb" : "#558ED5 ", 
-			"post. intestine" : "#8EB3E3 "}
     
     var pie = d3.layout.pie()
 	.sort(null)
@@ -405,7 +410,7 @@ function build_tree(selector, root, options) {  // , taxaToObj, maxCount) {
                 return height - y(d.value); 
 	    })
 	    .style("fill", function(d,i) {
-		return newColorMap2[d.key];
+		return "gray"; // return newColorMap2[d.key];
 	    })
 	    .style("stroke", "black");
 	
@@ -553,86 +558,29 @@ var vis = d3.select(selector).append("svg:svg")
             .append("svg:g")
             .attr("transform", "translate(20, 20)")
 
-
-// our tree data structures
-var adult_17_NJ = {tree_file:"tree_data/output_tree_adult_17_proportional.json",width:dims.width, height:3000, barheight: 5}
-var adult_17_Pars = {tree_file:"tree_data/fish17.parsimony.outtree.json",width:dims.width, height:3000, barheight: 5}
-var adult_15_Pars = {tree_file:"tree_data/fish15.json",width:dims.width, height:3000, barheight: 5}
-var adult_7B_Pars = {tree_file:"tree_data/7B.json",width:dims.width, height:3000, barheight: 5}
-var adult_7B_NJ = {tree_file:"tree_data/output_tree_adult_7B_NJ.json",width:dims.width, height:3000, barheight: 5}
-var adult_7B_pars_stretch = {tree_file:"tree_data/output_tree_adult_7B_NJ.json",width:dims.width, height:3000, barheight: 5}
-var adult_7B_pars_natural = {tree_file:"tree_data/output_tree_adult_7B_pars_natural.json",width:dims.width, height:3000, barheight: 5}
-var cell_culture_NJ = {tree_file:"tree_data/output_tree_adult_7B.json",width:dims.width, height:1200, barheight: 10}
-var cell_culture_pars_stretched = {tree_file:"tree_data/cell_culture_parsimony_tree.json",width:dims.width, height:1200, barheight: 10}
-var adult_17_Pars_test = {tree_file:"tree_data/fish_17_new.json",width:dims.width, height:3000, barheight: 5}
-var adult_7B_Pars_test = {tree_file:"tree_data/fish_7B_new.json",width:dims.width, height:3000, barheight: 5}
-var adult_15_Pars_test = {tree_file:"tree_data/fish_15_new.json",width:dims.width, height:3000, barheight: 5}
-var cell_culture_test = {tree_file:"tree_data/cell_culture_new.json",width:dims.width, height:1200, barheight: 10}
-var adult_7B_new_data = {tree_file:"tree_data/tree_7B_new_data.json",width:dims.width, height:3300, barheight: 5}
-var cell_culture_gt5updated = {tree_file:"tree_data/cell_culture_gt5.json",width:dims.width, height:1200, barheight: 10}
-var cell_culture_gt0updated = {tree_file:"tree_data/cell_culture_gt0.json",width:dims.width, height:2000, barheight: 10}
-var fish_17_new = {tree_file:"tree_data/fish_17.json",width:dims.width, height:3000, barheight: 7}
-var current_data = adult_7B_NJ.tree_file
-
+var allTrees = ""
+$.ajax({
+  url: 'master_list.json',
+  async: false,
+  dataType: 'json',
+  success: function (response) {
+      allTrees = response
+      var $choices = $("#dataSelect");
+      $choices.empty();
+      $.each(response, function(index, value) {
+	  $('#dataSelect')
+              .append($("<option></option>")
+                      .attr("value",value.tree_file)
+                      .text(value.name)); 
+      });
+  }
+});
 
 function updateData() {
-    current_data = "UNKNOWN"
-    
-    var optionSelcted = $("#dataSelect").val();
-    if (optionSelcted == "7BNJ") { 
-        current_data = adult_7B_NJ
-    }
-    if (optionSelcted == "7BParsStretched") { 
-        current_data = adult_7B_pars_stretch
-    }
-    if (optionSelcted == "7BParsNatural") { 
-        current_data = adult_7B_pars_natural
-    }
-    if (optionSelcted == "cell_culture_NJ") { 
-        current_data = cell_culture_NJ
-    }
-    if (optionSelcted == "cell_culture_pars") { 
-        current_data = cell_culture_pars_stretched
-    }
-    if (optionSelcted == "adult_17_NJ") { 
-        current_data = adult_17_NJ
-    }
-    if (optionSelcted == "adult_17_Pars") { 
-        current_data = adult_17_Pars
-    }
-    if (optionSelcted == "adult_15_Pars") { 
-        current_data = adult_15_Pars
-    }
-    if (optionSelcted == "7BPar") { 
-        current_data = adult_7B_Pars
-    }
-    if (optionSelcted == "adult_17_Pars_test") { 
-        current_data = adult_17_Pars_test
-    }
-    if (optionSelcted == "adult_7B_Pars_test") { 
-        current_data = adult_7B_Pars_test
-    }
-    if (optionSelcted == "adult_15_Pars_test") { 
-        current_data = adult_15_Pars_test
-    }
-    if (optionSelcted == "cell_culture_test") { 
-        current_data = cell_culture_test
-    }
-    if (optionSelcted == "adult_7B_new_data") { 
-        current_data = adult_7B_new_data
-    }
-    if (optionSelcted == "cell_culture_gt5") { 
-        current_data = cell_culture_gt5updated
-    }
-    if (optionSelcted == "cell_culture_gt0") { 
-        current_data = cell_culture_gt0updated
-    }
-    if (optionSelcted == "fish_17_gt5") { 
-        current_data = fish_17_new
-    }
-    
-
-    console.log("reloading " + current_data.tree_file + " from selection index " + optionSelcted)
+    var optionSelected = $("#dataSelect").val();
+    allTrees.forEach(function(entry) {
+	if (entry.tree_file == optionSelected)
+	    current_data = entry
+    })
     load()
-
 }

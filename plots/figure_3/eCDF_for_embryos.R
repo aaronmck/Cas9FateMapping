@@ -32,7 +32,7 @@ one_third_plot = ggplot() +
   ylim(c(0,4500))
 
 ggsave(one_third_plot,file="~/Desktop/one_third_simulated.pdf",width=8,height=8)
-
+ggsave(one_third_plot,file="~/Desktop/one_third_simulated.png",width=8,height=8)
 one_x_plot = ggplot() +
   geom_step(data=subset(one_x,hours == "72H"),aes(index,mean,col=hours,group=sample),direction="vh",size=line_width) + 
   geom_step(data=subset(one_x,hours == "30H"),aes(index,mean,col=hours,group=sample),direction="vh",size=line_width) + 
@@ -50,3 +50,4 @@ one_x_plot = ggplot() +
   ylim(c(0,4500))
 
 ggsave(one_x_plot,file="~/Desktop/one_x_simulated.pdf",width=8,height=8)
+ggsave(one_x_plot,file="~/Desktop/one_x_simulated.png",width=8,height=8)
