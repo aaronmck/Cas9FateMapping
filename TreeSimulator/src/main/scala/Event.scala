@@ -10,6 +10,7 @@ case class Event(name: String, sample: String, numberOfReads: Int, eventStrings:
   // make a map that contains the actual events and their positions as a way to remove duplicate - multisite events
   val eventMap = new HashMap[String, Array[Int]]()
   eventStrings.zipWithIndex.foreach { case (evt, index) => eventMap(evt) = eventMap.getOrElse(evt, Array[Int]()) :+ index }
+
   val containsNone = if (eventMap contains "NONE") 1 else 0
 
   // store our size for quick reference

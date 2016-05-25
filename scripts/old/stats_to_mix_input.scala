@@ -14,8 +14,7 @@ val output = new PrintWriter(args(1))
 val mixCommandFile = new PrintWriter(args(2))
 val annotationFile = new PrintWriter(args(3))
 val weightFile = new PrintWriter(args(4))
-
-
+val eventFile = new PrintWriter(args(5))
 
 // --------------------------------------------------
 // find the event columns -- make a mapping
@@ -158,3 +157,7 @@ output.close()
 //weightFile.write(keyToTag.size + "\t" + (nextIndex - 3) + "\n")
 weightFile.write(weights.mkString("") + "\n")
 weightFile.close()
+
+eventFile.write("event\tnumber\n")
+eventToNumber.foreach{case(event,number) => eventFile.write(event + "\t" + number + "\n")}
+eventFIle.close()
