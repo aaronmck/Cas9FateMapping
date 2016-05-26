@@ -1,5 +1,5 @@
 # FateMappingCode
-Collection of code from the [Shendure lab](https://github.com/shendurelab/) fate mapping project using the CRISPR/Cas9 system.
+Collection of code from the [Shendure lab](https://github.com/shendurelab/) fate mapping project using the CRISPR/Cas9 system. This is unsupported code, and stored here as an example of how we did our analysis in the paper, which may or may not be the way you'll want to do your own analysis.
 
 # Abstract
 
