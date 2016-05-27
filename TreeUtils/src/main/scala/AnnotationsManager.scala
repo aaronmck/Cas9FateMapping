@@ -53,17 +53,6 @@ class AnnotationsManager(annotations: File, sampleToClade: File, cladeIdentities
   val cladeMapping = new HashMap[String,CladeEntry]()
   val sampleTotals = new HashMap[String,Int]()
 
-  // map the annotation header
-  mappingFile.foreach{line => {
-    val sp = line.split(seperator)
-    sampleTotals(sp(header("sample"))) = sampleTotals.getOrElse(sp(header("sample")),0) + sp(header("count")).toInt
-    annotationMapping(sp(header("taxa"))) = AnnotationEntry(sp(header("taxa")),
-      sp(header("sample")),
-      sp(header("count")).toInt,
-      sp(header("proportion")).toFloat,
-      sp(header("event")))
-  }}
-
   // now get the mapping for sample to clade and color
   cladeFile.foreach{line => {
     val sp = line.split(seperator)
@@ -72,6 +61,20 @@ class AnnotationsManager(annotations: File, sampleToClade: File, cladeIdentities
       sp(cladeHeader("clade")),
       sp(cladeHeader("color")))
   }}
+
+
+  // map the annotation header
+  mappingFile.foreach{line => {
+    val sp = line.split(seperator)
+    sampleTotals(cladeMapping(sp(header("sample"))).clade) = sampleTotals.getOrElse(cladeMapping(sp(header("sample"))).clade,0) + sp(header("count")).toInt
+    annotationMapping(sp(header("taxa"))) = AnnotationEntry(sp(header("taxa")),
+      sp(header("sample")),
+      sp(header("count")).toInt,
+      sp(header("proportion")).toFloat,
+      sp(header("event")))
+  }}
+
+
 
   var eventDefinitionsToColors : Option[HashMap[String,Array[String]]] = None
 

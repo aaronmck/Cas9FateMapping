@@ -20,8 +20,8 @@ case class RichNode(originalNd: Node,
   // store the orginal node for later if needed
   val originalNode = originalNd
 
-
   var name = originalNd.getID
+
   // handle some basic annotations about the ndoe
   val myAnnotations = annotations.annotationMapping.get(name)
 
@@ -39,8 +39,8 @@ case class RichNode(originalNd: Node,
 
   // do we have taxa counts to fill in? internal nodes won't have these values but leaves will
   if (myAnnotations.isDefined) {
-    sampleName = myAnnotations.get.sample
-    color = annotations.cladeMapping(sampleName).color
+    sampleName = annotations.cladeMapping(myAnnotations.get.sample).clade // myAnnotations.get.sample
+    color = annotations.cladeMapping(myAnnotations.get.sample).color
     count = myAnnotations.get.count
     sampleProportions(sampleName) = myAnnotations.get.proportion
   }
@@ -69,7 +69,7 @@ case class RichNode(originalNd: Node,
     childrenEvents = Array[String]()
     sampleProportions = new mutable.HashMap[String, Double]()
     if (myAnnotations.isDefined) {
-      sampleProportions(myAnnotations.get.sample) = myAnnotations.get.proportion
+      sampleProportions(annotations.cladeMapping(myAnnotations.get.sample).clade) = myAnnotations.get.proportion
     }
 
     children.foreach { newChild => {
