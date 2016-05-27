@@ -17,7 +17,7 @@ Data used in the paper is available in the [Dryad repository](http://datadryad.o
 
 ## Dependencies
 
-There are lots (Sorry). For languages we rely upon Scala (Java), Python, Javascript/HTML, D3, and R generally (see the GitHub stats bar at the top).  For computational tools we used Trimmomatic, NEEDLEALL, MAFFT, GATK Queue, and Grid Engine to name a few.
+There are lots (Sorry). For languages we rely upon Scala (Java/JVM), Python, Javascript/HTML, D3, and R generally (see the GitHub stats bar at the top).  For computational tools we used Trimmomatic, NEEDLEALL, MAFFT, GATK Queue, and Grid Engine to name a few.
 
 ## Directories
 
