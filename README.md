@@ -3,7 +3,8 @@ Collection of code from the [Shendure lab](https://github.com/shendurelab/) fate
 
 # Abstract
 
-Genome editing of synthetic target arrays for lineage tracing (GESTALT)
+Genome editing of synthetic target arrays for lineage tracing (GESTALT).
+
 Multicellular systems develop from single cells through a lineage, but current lineage tracing approaches scale poorly to whole organisms. Here we use genome editing to progressively introduce and accumulate diverse mutations in a DNA barcode over multiple rounds of cell division. The barcode, an array of CRISPR/Cas9 target sites, records lineage relationships in the patterns of mutations shared between cells. In cell culture and zebrafish, we show that rates and patterns of editing are tunable, and that thousands of lineage-informative barcode alleles can be generated. We find that most cells in adult zebrafish organs derive from relatively few embryonic progenitors. Genome editing of synthetic target arrays for lineage tracing (GESTALT) will help generate large-scale maps of cell lineage in multicellular systems.
 
 ## Paper ##
