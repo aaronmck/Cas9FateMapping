@@ -64,7 +64,6 @@ function build_tree(selector, root, options) {  // , taxaToObj, maxCount) {
     w = parseInt(w),
     h = parseInt(h);
     
-    // taxa    name    sample  depth   numberOfReads   events  fullName
     var tree = d3.layout.cluster()
         .size([h, w])
         .sort(function (node) {
@@ -75,6 +74,9 @@ function build_tree(selector, root, options) {  // , taxaToObj, maxCount) {
         })
 	.separation(function (a, b) {return 2})
     
+    // get the legend colors
+    var colorMap = legendColor(root)
+    drawLegend(colorMap)
     
     var nodes = tree.nodes(root),
 	links = tree.links(nodes);
@@ -90,38 +92,86 @@ function build_tree(selector, root, options) {  // , taxaToObj, maxCount) {
     var circleOutline = "black"
     var circleHighlight = "red"
     
-    var membership_location = event_location + 275
+    var membership_location = event_location + 265
     var barplot_location = membership_location + barWidth + barSpacer
-    var counts_bar_max_size = 150
+    var counts_bar_max_size = 225
     var bar_stroke_width = '0.8px'
     var edit_stroke_width = '.25px'
     
-    // the offsets in the aligned reads to consider for event plotting
+    // the offsets in the aligned reads to consider for event plotting -- would be better to pass in at some point
     var startRegion = 92
     var endRegion = 425
-    
-    var scaleCounts = d3.scale.log().domain([1,100]).range([0,counts_bar_max_size])
-    var xAxis = d3.svg.axis().scale(scaleCounts).orient("bottom").ticks(5).tickFormat(function (d) {
-        return scaleCounts.tickFormat(4,d3.format(",d"))(d)
-    })
-    var xAxis2 = d3.svg.axis().scale(scaleCounts).orient("top").ticks(5).tickFormat(function (d) {
-        return scaleCounts.tickFormat(4,d3.format(",d"))(d)
-    })
-    
+
+    // when we want to plot the proportion in blood, find the max proportion
+    // blood proportion is turned off right now
     var maxBlood = d3.max(nodes, function(x) {
         if (!x.children) {
 	    return +x.blood
         } else {
 	    return 0.0
         }
-    })   
-        
-    vis = d3.select(selector).append("svg:svg")
-        .attr("width", w + 800)
-        .attr("height", h + 200)
-        .append("svg:g")
-        .attr("transform", "translate(30, 30)")
+    })
 
+    // find the minimum value in the data so that we can set a scale
+    var absMin = 0.0
+    var minProp = d3.min(nodes, function(x) {
+        if (!x.children) {
+	    return Math.max(absMin,+x.max_organ_prop) * 100.0; 
+        } else {
+	    return 100.0
+        }
+    })
+    var maxProp = d3.max(nodes, function(x) {
+        if (!x.children) {
+	    return +x.max_organ_prop * 100.0; 
+        } else {
+	    return 0.0
+        }
+    })
+    
+    // we want the scale to go slightly lower than the minimum, so that the smallest value still has some minimal thickness
+    var scaleCounts = d3.scale.log().domain([minProp,maxProp]).range([0.05,counts_bar_max_size]) 
+    var xAxis = d3.svg.axis().scale(scaleCounts).orient("bottom").ticks(5).tickFormat(function (d) {
+        return scaleCounts.tickFormat(4,d3.format(",2d"))(d)
+    })
+    var xAxis2 = d3.svg.axis().scale(scaleCounts).orient("top").ticks(5).tickFormat(function (d) {
+        return scaleCounts.tickFormat(4,d3.format(",2d"))(d)
+    })
+
+    
+
+    // what's the initial zoom level we should have? we want to scale it so the whole tree fits in view, which is the
+    // max of the 
+    var initialScaleZoom = 800.0 / Math.max(options.width,options.height);
+    
+    // the main canvas that we're drawing onto
+    // scale(.5,.5)
+    // zoom from https://bl.ocks.org/mbostock/6123708 and http://jsfiddle.net/LYuta/2/
+    vis = d3.select(selector).append("svg:svg")
+        .attr("width", "100%")
+	.attr("height", "100%")
+        .append("svg:g")
+	.attr("viewBox", "0 0 " + boxWidth + " " + boxHeight) // this should be parameterized at some point
+        .attr("transform", "translate(30, 30)scale(" + initialScaleZoom + "," + initialScaleZoom + ")")
+	.append("g")
+	.call(d3.behavior.zoom().scaleExtent([0, 10]).on("zoom", zoomed))
+	.append("g");
+
+    // make a rectangle that catches the zoom mouse movements; otherwise we can
+    // only zoom over specific objects in the plot, which is really confusing to the user
+    var catcher = vis.append("rect")
+	.attr("width", "100%")
+	.attr("height", "100%")
+	.style("fill", "none") 
+	.style("pointer-events", "all");  
+    
+    //respond to mouse, even when transparent
+    // we need to reference vis in the function
+    function zoomed() {
+	vis.attr("transform", "translate(" + d3.event.translate + ")scale(" + d3.event.scale + ")");
+    }
+
+    // put the axis on the plot at the top and the bottom
     vis.append("g")
 	.attr("transform", "translate(" + (barplot_location) + "," + ( h + 2) + ")")
 	.call(xAxis)
@@ -151,7 +201,10 @@ function build_tree(selector, root, options) {  // , taxaToObj, maxCount) {
     } else {
         var yscale = scaleBranchLengths(nodes, w)
     }
-    
+
+    // add the links between nodes on the tree -- we use solid lines for normal nodes,
+    // dashed lines for lines that lead to nodes that are duplicates when two organs have
+    // the same allele
     var link = vis.selectAll("path.link")
         .data(tree.links(nodes))
         .enter().append("svg:path")
@@ -166,7 +219,6 @@ function build_tree(selector, root, options) {  // , taxaToObj, maxCount) {
 	    } else {
 		return ("2, 2");
 	    }});
-
     
     // add all the non-tree data: reads, proportions, blood membership
     var drawNonTreeData = vis.selectAll("g.node")
@@ -192,7 +244,10 @@ function build_tree(selector, root, options) {  // , taxaToObj, maxCount) {
 	    .attr('stroke', '#111')
 	    .attr('stroke-width', bar_stroke_width)
 	    .attr("width", barHeight)
-	    .attr("height",scaleValue( d.max_organ_prop * 100.0 + 1.0)) // (taxaToObj(d.name).proportion // FIX
+	    .attr("height", function(node) {
+		// if the max organ proportion is less than 1% (and results in a NaN log score), set it to a minimum value
+		return scaleValue(Math.max(absMin,+d.max_organ_prop) * 100.0) 
+	    }) 
 	    .attr("transform","translate(" + barplot_location + "," + (d.x + barHeight/2.0) + ") rotate(-90) ");
     }
     
@@ -277,6 +332,82 @@ function build_tree(selector, root, options) {  // , taxaToObj, maxCount) {
 	    .attr("width", barHeight)
 	    .attr("transform","translate(" + (primary_bar + scaleX(d.blood)) + "," + (d.x + barHeight/2.0) + ") rotate(-90) ");
     }
+
+
+    // ------------------------------------------------------------------------
+    // draw the legend onto the plot
+    // ------------------------------------------------------------------------
+    function drawLegend(colorMap) {
+	// remove any previous legends
+	$( "#fixeddivleg" ).empty();
+
+	var htmlOutput = "<b>Rectangle colors: </b><br>"
+	$( '#fixeddivleg' ).html( htmlOutput );
+
+	var maxPerColumn = 12
+	
+	// legend spacer between individual entries
+	var legendSpace = 20
+	var legendOffset = 10
+	
+	// make a new SVG for the legend and text
+	var legend = d3.select("#fixeddivleg").append("svg")
+            .attr("width", 300)
+            .attr("height", 300)
+            .append("svg:g")
+	    .attr("transform","translate(" + 20 + "," + 20 + ")");
+
+	var rects = legend.selectAll("circle")
+            .data(d3.entries(colorMap))
+            .enter()
+	    .append("rect")
+	    .filter(function(d) {
+		return d.key !== "UNKNOWN"
+	    })
+	    .attr("x", function(d, i) {
+		if (i >= maxPerColumn)
+		    return(200)
+		else
+		    return(30)
+	    })
+	    .attr("y", function(d, i) {
+		if (i >= maxPerColumn)
+		    return (i - maxPerColumn) * legendSpace;
+		else
+		    return (i) * legendSpace;
+	    })
+	    .attr("fill", function(d, i) {
+		return(d.value);
+	    })
+	    .attr("width", 10)
+	    .attr("height", 10)
+	
+	
+	legend.selectAll("text")
+	    .data(d3.entries(colorMap))
+            .enter()
+	    .append("text")
+	    .filter(function(d) {
+		return d.key !== "UNKNOWN"
+	    })
+	 .attr("x", function(d, i) {
+		if (i >= maxPerColumn)
+		    return(200 + legendSpace)
+		else
+		    return(30 + legendSpace)
+	    })
+	    .attr("y", function(d, i) {
+		if (i >= maxPerColumn)
+		    return (i - maxPerColumn) * legendSpace + legendOffset;
+		else
+		    return (i) * legendSpace + legendOffset;
+		
+	    })
+	    .text(function(d,i){
+		return d.key;
+	    })
+    }	
+	
     
     // ------------------------------------------------------------------------
     // the circles for the end nodes
@@ -321,7 +452,7 @@ function build_tree(selector, root, options) {  // , taxaToObj, maxCount) {
     // handle the mouse over bits for node highlighting
     // ------------------------------------------------------------------------
     drawNodeCircles.on("click", function(d) {
-	$( "#fixeddiv" ).empty();
+	$( "#fixeddivinfo" ).empty();
 	
         // draw out barplots
         drawHoverBarChart(d, d3.event.pageX, d3.event.pageY, 280, 280)
@@ -340,10 +471,10 @@ function build_tree(selector, root, options) {  // , taxaToObj, maxCount) {
     function drawHoverBarChart(d, xPos, yPos, proposedHeight, proposedWidth) {
 	
 	// add a box of text about this node
-	var htmlOutput = "<b>Node:</b> " + d.name + "<br><b>depth:</b>" + d.depth
-	htmlOutput +=    "<br><b>consistency:</b>" + d.consistency + "<br><b>common edits:</b>" +
-	    d.commonEvent + "<br><b>entropy:</b>" + d.entropy + "<br><b>HMID:</b>" + d.event.split("_").join(", ") + "<br><b>is WT:</b>" + d.isWT + "<br>"
-	$( '#fixeddiv' ).html( htmlOutput );
+	var htmlOutput = "<b>Node name: </b> " + d.name + "<br><br><b>depth: </b>" + d.depth
+	htmlOutput += "<br><br><b>Edits shared by child nodes (* for not shared):</b><br>" + d.commonEvent.split("_").join(", ")
+	htmlOutput += "<br><br><b>Allele (inferred for internal nodes):</b><br>" + d.event.split("_").join(", ") + "<br><br><b>Proportion of sampled organs / organism:</b><br>"
+	$( '#fixeddivinfo' ).html( htmlOutput );
 	
 	var margin = {top: 10, right: 10, bottom: 100, left: 60}
 	var height = proposedHeight - margin.top - margin.bottom;
@@ -367,11 +498,11 @@ function build_tree(selector, root, options) {  // , taxaToObj, maxCount) {
             assoc[key] = value;
         })
         
-        var vis2 = d3.select("#fixeddiv").append("svg:svg")
-            .attr("width", width + margin.left + margin.right)
-            .attr("height", height + margin.top + margin.bottom)
+        var vis2 = d3.select("#fixeddivinfo").append("svg:svg")
+            .attr("width", 320)
+            .attr("height", 500)
             .append("svg:g")
-	    .attr("transform","translate(" + margin.left + "," + margin.top + ")");
+	    .attr("transform","translate(" + 50 + "," + 20 + ")");
 	
 	vis2.append("g")
 	    .attr("class", "y axis")
@@ -526,9 +657,25 @@ function flash(name, dy) {
   };
 }
 
+function legendColor(rootNode) {
+    organToColor = []
+    legendToColorRec(rootNode,organToColor)
+    return(organToColor)
+}
+
+function legendToColorRec(rootNode,colorMap) {
+    colorMap[rootNode.sample] = rootNode.color
+    if (rootNode && rootNode.children) {
+        for (var i = 0, l = rootNode.children.length; i < l; ++i) {
+	    legendToColorRec(rootNode.children[i],organToColor)
+        }
+    }
+    return(colorMap);
+}
+
 // ************************************************************************************************************************
 //
-// The main entry point for the script -- load and draw the tree, and add out events on the right side of the diagram
+// The main entry point for the script -- populate the list of trees, and load and draw the tree once the user selects one
 //
 // ************************************************************************************************************************
 
@@ -550,7 +697,7 @@ function load() {
         build_tree(selector, newick[0], {width: current_data.width, height: current_data.height, barheight: current_data.barheight});
     });    
 }
-var dims = {width: 800,height: 3000}
+var dims = {width: 800,height: 100}
 var selector = '#phylogram'
 var vis = d3.select(selector).append("svg:svg")
             .attr("width", dims.width + 600)
@@ -558,6 +705,12 @@ var vis = d3.select(selector).append("svg:svg")
             .append("svg:g")
             .attr("transform", "translate(20, 20)")
 
+boxWidth = 800
+boxHeight = 800
+sidebarWidth = 200
+sidebarHeight = 800
+
+// populate the tree list
 var allTrees = ""
 $.ajax({
   url: 'master_list.json',
@@ -577,6 +730,11 @@ $.ajax({
 });
 
 function updateData() {
+
+
+    // finally trigger layout of the panel
+    // $( "#mypanel" ).trigger( "updatelayout" );
+    
     var optionSelected = $("#dataSelect").val();
     allTrees.forEach(function(entry) {
 	if (entry.tree_file == optionSelected)
@@ -584,3 +742,19 @@ function updateData() {
     })
     load()
 }
+
+/** load up the jquery stuff **/
+$( document ).on( "pageinit", "#demo-page", function() {
+    $( document ).on( "swipeleft swiperight", "#demo-page", function( e ) {
+        // We check if there is no open panel on the page because otherwise
+        // a swipe to close the left panel would also open the right panel (and v.v.).
+        // We do this by checking the data that the framework stores on the page element (panel: open).
+        if ( $.mobile.activePage.jqmData( "panel" ) !== "open" ) {
+            if ( e.type === "swipeleft"  ) {
+                $( "#mypanel" ).panel( "open" );
+            } else if ( e.type === "swiperight" ) {
+                $( "#mypanel" ).panel( "open" );
+            }
+        }
+    });
+});
