@@ -1,3 +1,5 @@
+An updated version of this codebase is available here: [Single-cell GESTALT codebase](https://github.com/aaronmck/SC_GESTALT)
+
 # FateMappingCode
 Collection of code from the [Shendure lab](https://github.com/shendurelab/) / [Schier lab](http://www.schierlab.fas.harvard.edu/) lineage tracing project using the CRISPR/Cas9 system. This is unsupported code, and stored here as an example of how we did our analysis in the paper, which may or may not be the way you'll want to do your own analysis.  The paper version of this repository is labeled v1, though some of the tree display code is newer than that (changes for our website).
 
